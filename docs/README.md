@@ -34,6 +34,7 @@
 | **Root LM** | Orchestrator LLM. Sees only metadata about context, writes REPL code |
 | **Sub-LM** | Called inside REPL via `llm_query()`. Gets focused sub-chunks. Same model in this project |
 | **FINAL()** | LLM terminates the loop by calling this. Returns the answer string |
+| **Recursive-first policy** | On long contexts, the runtime forces evidence gathering before finalization |
 | **Context rot** | Quality degradation as context length grows - the problem RLM solves |
 
 ---
@@ -57,6 +58,7 @@ Model       : qwen3.5:2b via Ollama (local only)
 Root LM     : qwen3.5:2b
 Sub LM      : qwen3.5:2b (same model - fair comparison)
 REPL type   : Local exec()-based (LocalREPL)
+REPL tools  : chunk_text, keyword_windows, regex_windows, query_chunks, slices
 Logging     : JSONL files in experiments/
 Hardware    : RTX 4050 Laptop GPU, 6GB VRAM
 RL phase    : Final phase via Google Colab + VS Code extension
@@ -72,8 +74,16 @@ RL phase    : Final phase via Google Colab + VS Code extension
 | Phase 1 - Core Infrastructure | **Done** |
 | Phase 2 - Benchmarks + Runner | **Done** |
 | Phase 3 - Run experiments & analysis | In progress |
-| Phase 4 - Publication and public release | Planned |
-| Phase 5 - RL-on-RLM final phase | Planned |
+| Phase 4 - RL-on-RLM | Planned |
+| Phase 5 - Publication and public release | Planned |
+
+---
+
+## Current Runtime Notes
+
+- Long contexts now use a recursive-first runtime policy instead of one-shot finalization.
+- FINAL() can be rejected on long contexts if the model has not gathered enough evidence.
+- The REPL exposes helper functions for chunking, windowing, and focused sub-queries to make real recursive behavior easier.
 
 ---
 
@@ -96,3 +106,5 @@ RL phase    : Final phase via Google Colab + VS Code extension
 | Official repo | https://github.com/alexzhang13/rlm |
 | Minimal impl | https://github.com/alexzhang13/rlm-minimal |
 | Community impl | https://github.com/fullstackwebdev/rlm_repl |
+
+

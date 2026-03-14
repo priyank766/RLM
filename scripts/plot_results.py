@@ -1,673 +1,637 @@
 """
-Publication-quality plots for RLM vs Vanilla comparison.
-Style: DeepSeek-R1-Zero paper.
+Clean research-style plotting for RLM experiment results.
 
-Each (method x position) is its own line on the chart.
-X-axis is numeric context length. Multiple lines tell different stories.
+Principles:
+- One figure per insight.
+- Minimal clutter.
+- Comparison-focused, not decorative.
+- Use the actual experiment schema directly.
 
-Usage:
-    uv run python scripts/plot_results.py experiments/niah_full_v2.jsonl
-    uv run python scripts/plot_results.py experiments/niah_full_v2.jsonl experiments/niah_long_v1.jsonl --merge
+Outputs are written into `experiments/plots/` by default.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
-from matplotlib.lines import Line2D
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-# ---------------------------------------------------------------------------
-# Colors & styles per line
-# ---------------------------------------------------------------------------
-_BLUE  = "#1f77b4"
-_RED   = "#d62728"
-_GREEN = "#2ca02c"
-_GRAY  = "#7f7f7f"
-
-# Vanilla = blue shades, RLM = red shades
-_LINE_STYLES = {
-    # (method, position) -> (color, linestyle, marker)
-    ("vanilla", 0.1): ("#1f77b4", "-",  "o"),   # blue solid
-    ("vanilla", 0.5): ("#4a9fdb", "--", "s"),    # lighter blue dashed
-    ("vanilla", 0.9): ("#7ec8f0", ":",  "^"),    # lightest blue dotted
-    ("rlm",     0.1): ("#d62728", "-",  "o"),    # red solid
-    ("rlm",     0.5): ("#e8686a", "--", "s"),    # lighter red dashed
-    ("rlm",     0.9): ("#f5a3a4", ":",  "^"),    # lightest red dotted
+LENGTH_BUCKETS = [4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000]
+LENGTH_LABELS = {
+    4_000: "4K",
+    8_000: "8K",
+    16_000: "16K",
+    32_000: "32K",
+    64_000: "64K",
+    128_000: "128K",
+    256_000: "256K",
 }
-
-_POS_NAMES = {0.1: "10%", 0.5: "50%", 0.9: "90%"}
-
-# Length buckets
-_LENGTH_BUCKETS = [4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000]
-_LENGTH_LABELS  = {4000: "4K", 8000: "8K", 16000: "16K", 32000: "32K",
-                   64000: "64K", 128000: "128K", 256000: "256K"}
-_POSITIONS = [0.1, 0.5, 0.9]
+POSITIONS = [0.1, 0.5, 0.9]
+POSITION_LABELS = {0.1: "10%", 0.5: "50%", 0.9: "90%"}
+METHODS = ["vanilla", "rlm"]
+METHOD_LABELS = {"vanilla": "Vanilla", "rlm": "RLM"}
+METHOD_COLORS = {"vanilla": "#1f4e79", "rlm": "#b23a48"}
+METHOD_MARKERS = {"vanilla": "o", "rlm": "s"}
 
 
-def _apply_style():
-    plt.rcParams.update({
-        "figure.facecolor":   "white",
-        "axes.facecolor":     "white",
-        "axes.edgecolor":     "#CCCCCC",
-        "axes.linewidth":     0.8,
-        "axes.grid":          True,
-        "grid.color":         "#E0E0E0",
-        "grid.linewidth":     0.5,
-        "grid.alpha":         0.8,
-        "font.family":        "serif",
-        "font.serif":         ["Times New Roman", "DejaVu Serif", "serif"],
-        "font.size":          11,
-        "axes.titlesize":     13,
-        "axes.titleweight":   "bold",
-        "axes.labelsize":     12,
-        "xtick.labelsize":    10,
-        "ytick.labelsize":    10,
-        "legend.fontsize":    9,
-        "legend.framealpha":  0.9,
-        "legend.edgecolor":   "#CCCCCC",
-        "legend.fancybox":    False,
-        "figure.dpi":         150,
-        "savefig.dpi":        200,
-        "savefig.bbox":       "tight",
-        "savefig.pad_inches": 0.15,
-        "lines.linewidth":    1.8,
-        "lines.markersize":   7,
-    })
+def apply_style() -> None:
+    plt.rcParams.update(
+        {
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+            "savefig.facecolor": "white",
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "DejaVu Serif", "serif"],
+            "font.size": 10.5,
+            "axes.titlesize": 12,
+            "axes.titleweight": "bold",
+            "axes.labelsize": 11,
+            "axes.edgecolor": "#444444",
+            "axes.linewidth": 0.8,
+            "axes.grid": True,
+            "grid.color": "#d7d7d7",
+            "grid.linestyle": "--",
+            "grid.linewidth": 0.55,
+            "grid.alpha": 0.85,
+            "legend.frameon": True,
+            "legend.framealpha": 0.95,
+            "legend.edgecolor": "#cfcfcf",
+            "legend.fancybox": False,
+            "legend.fontsize": 9,
+            "xtick.labelsize": 9.5,
+            "ytick.labelsize": 9.5,
+            "figure.dpi": 140,
+            "savefig.dpi": 220,
+            "savefig.bbox": "tight",
+            "savefig.pad_inches": 0.12,
+            "lines.linewidth": 2.0,
+            "lines.markersize": 6,
+        }
+    )
 
-
-# ---------------------------------------------------------------------------
-# Data helpers
-# ---------------------------------------------------------------------------
 
 def load_jsonl(path: Path) -> list[dict]:
-    results = []
-    with open(path, encoding="utf-8") as f:
-        for line in f:
+    rows: list[dict] = []
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
             line = line.strip()
             if line:
-                results.append(json.loads(line))
-    return results
+                rows.append(json.loads(line))
+    return rows
 
 
-def _bucket(ctx_len: int) -> int:
-    return min(_LENGTH_BUCKETS, key=lambda b: abs(ctx_len - b))
+def bucket_length(context_length: int) -> int:
+    return min(LENGTH_BUCKETS, key=lambda bucket: abs(context_length - bucket))
 
 
-def _infer_positions(results: list[dict]) -> dict[str, float]:
+def infer_niah_positions(rows: list[dict]) -> dict[str, float]:
     try:
         from benchmarks.niah import generate_niah_suite
-        all_lengths = set(r["context_length"] for r in results)
-        bucket_set = set(_bucket(l) for l in all_lengths)
-        tasks = generate_niah_suite(context_lengths=sorted(bucket_set), positions=_POSITIONS)
-        mapping = {}
-        for t in tasks:
-            mapping[f"{t.context_length}:{t.query}"] = t.needle_position_pct
-        return mapping
     except Exception:
         return {}
 
+    niah_rows = [row for row in rows if row.get("task_type") == "niah"]
+    if not niah_rows:
+        return {}
 
-def enrich(results: list[dict]) -> list[dict]:
-    pos_map = _infer_positions(results)
-    for r in results:
-        r["bucket_length"] = _bucket(r["context_length"])
-        key = f"{r['context_length']}:{r['query']}"
-        r["needle_position"] = pos_map.get(key)
-    if not pos_map:
-        groups = defaultdict(list)
-        for r in results:
-            groups[(r["bucket_length"], r["method"])].append(r)
-        for group in groups.values():
-            group.sort(key=lambda r: r["context_length"])
-            for i, r in enumerate(group):
-                if i < len(_POSITIONS):
-                    r["needle_position"] = _POSITIONS[i]
-    return results
+    bucket_set = sorted({bucket_length(row["context_length"]) for row in niah_rows})
+    tasks = generate_niah_suite(context_lengths=bucket_set, positions=POSITIONS)
+    mapping: dict[str, float] = {}
+    for task in tasks:
+        mapping[f"{task.context_length}:{task.query}"] = task.needle_position_pct
+    return mapping
 
 
-def _active_buckets(results: list[dict]) -> list[int]:
-    present = sorted(set(r["bucket_length"] for r in results))
-    return [b for b in _LENGTH_BUCKETS if b in present]
+def enrich_rows(rows: list[dict]) -> list[dict]:
+    pos_map = infer_niah_positions(rows)
+    enriched: list[dict] = []
+    for row in rows:
+        item = dict(row)
+        item["bucket_length"] = bucket_length(row["context_length"])
+        item["correct"] = bool(row.get("scores", {}).get("contains_answer", False))
+        item["timeout"] = bool(row.get("timed_out", False))
+        item["truncated"] = bool(row.get("truncated", False))
+        item["iterations"] = int(row.get("iterations", row.get("rlm_iterations", 0) or 0))
+        item["sub_calls"] = int(row.get("sub_calls", 0) or 0)
+        item["repl_error_count"] = len(row.get("repl_errors", []))
+        key = f"{row['context_length']}:{row['query']}"
+        item["needle_position"] = pos_map.get(key)
+        enriched.append(item)
+
+    if pos_map:
+        return enriched
+
+    grouped: dict[tuple[int, str], list[dict]] = defaultdict(list)
+    for item in enriched:
+        if item.get("task_type") == "niah":
+            grouped[(item["bucket_length"], item["method"])].append(item)
+
+    for group in grouped.values():
+        group.sort(key=lambda item: item["context_length"])
+        for index, item in enumerate(group[: len(POSITIONS)]):
+            item["needle_position"] = POSITIONS[index]
+    return enriched
 
 
-def _merge_results(all_results: list[dict]) -> list[dict]:
-    seen = {}
-    for r in all_results:
-        key = (r["method"], r["context_length"], r.get("query", ""))
-        seen[key] = r
-    return list(seen.values())
+def merge_rows(rows: list[dict]) -> list[dict]:
+    unique: dict[tuple, dict] = {}
+    for row in rows:
+        key = (
+            row.get("run_name"),
+            row.get("method"),
+            row.get("task_type"),
+            row.get("context_length"),
+            row.get("query"),
+        )
+        unique[key] = row
+    return list(unique.values())
 
 
-def _fmt_k(val, _pos=None):
-    if val >= 1000:
-        return f"{val / 1000:.0f}K"
-    return f"{val:.0f}"
+def active_buckets(rows: list[dict]) -> list[int]:
+    present = {row["bucket_length"] for row in rows}
+    return [bucket for bucket in LENGTH_BUCKETS if bucket in present]
 
 
-def _setup_xaxis(ax, buckets):
-    """Set up a numeric X-axis with K-formatted ticks."""
-    x_arr = np.array(buckets, dtype=float)
-    ax.set_xlim(x_arr[0] * 0.8, x_arr[-1] * 1.1)
-    ax.set_xticks(x_arr)
-    ax.xaxis.set_major_formatter(mticker.FuncFormatter(_fmt_k))
+def mean(values: list[float]) -> float:
+    return float(sum(values) / len(values)) if values else float("nan")
 
 
-# ---------------------------------------------------------------------------
-# Plot 1: Accuracy — one line per (method x position)
-# ---------------------------------------------------------------------------
-
-def plot_accuracy_multiline(results: list[dict], out: Path):
-    """6 lines: (vanilla|rlm) x (10%|50%|90%), X=context length, Y=accuracy."""
-    buckets = _active_buckets(results)
-    x_arr = np.array(buckets, dtype=float)
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    for method in ["vanilla", "rlm"]:
-        for pos in _POSITIONS:
-            color, ls, marker = _LINE_STYLES[(method, pos)]
-            label = f"{method} @ {_POS_NAMES[pos]}"
-
-            ys = []
-            for b in buckets:
-                hits = [r for r in results
-                        if r["method"] == method
-                        and r["bucket_length"] == b
-                        and r.get("needle_position") == pos]
-                if hits:
-                    ys.append(float(hits[0]["scores"]["contains_answer"]) * 100)
-                else:
-                    ys.append(np.nan)
-
-            ax.plot(x_arr, ys, marker=marker, linestyle=ls, color=color,
-                    markersize=7, linewidth=1.8, label=label, zorder=4)
-
-    # Perfect baseline
-    ax.axhline(100, color=_GREEN, linestyle="--", linewidth=1.0, alpha=0.4,
-               label="perfect score")
-
-    ax.set_xlabel("Context Length")
-    ax.set_ylabel("Accuracy")
-    ax.set_ylim(-5, 115)
-    ax.yaxis.set_major_formatter(mticker.PercentFormatter(decimals=0))
-    _setup_xaxis(ax, buckets)
-
-    # Split legend: vanilla group + rlm group
-    ax.legend(loc="lower left", ncol=2, columnspacing=1.5)
-    ax.set_title("NIAH accuracy by method and needle position")
-
-    fig.tight_layout()
-    fig.savefig(out, facecolor="white")
-    plt.close(fig)
-    print(f"  -> {out}")
+def percentile(values: list[float], q: float) -> float:
+    if not values:
+        return float("nan")
+    return float(np.percentile(np.asarray(values, dtype=float), q))
 
 
-# ---------------------------------------------------------------------------
-# Plot 2: Latency — one line per (method x position) with bands
-# ---------------------------------------------------------------------------
-
-def plot_latency_multiline(results: list[dict], out: Path):
-    """6 lines: (vanilla|rlm) x (10%|50%|90%), X=context length, Y=latency."""
-    buckets = _active_buckets(results)
-    x_arr = np.array(buckets, dtype=float)
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    for method in ["vanilla", "rlm"]:
-        for pos in _POSITIONS:
-            color, ls, marker = _LINE_STYLES[(method, pos)]
-            label = f"{method} @ {_POS_NAMES[pos]}"
-
-            ys = []
-            for b in buckets:
-                hits = [r for r in results
-                        if r["method"] == method
-                        and r["bucket_length"] == b
-                        and r.get("needle_position") == pos]
-                if hits:
-                    ys.append(hits[0]["latency_s"])
-                else:
-                    ys.append(np.nan)
-
-            ax.plot(x_arr, ys, marker=marker, linestyle=ls, color=color,
-                    markersize=7, linewidth=1.8, label=label, zorder=4)
-
-    ax.set_xlabel("Context Length")
-    ax.set_ylabel("Latency (seconds)")
-    _setup_xaxis(ax, buckets)
-    ax.legend(loc="upper left", ncol=2, columnspacing=1.5)
-    ax.set_title("NIAH latency by method and needle position")
-
-    fig.tight_layout()
-    fig.savefig(out, facecolor="white")
-    plt.close(fig)
-    print(f"  -> {out}")
+def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float, float]:
+    if total == 0:
+        return (float("nan"), float("nan"))
+    p = successes / total
+    denom = 1 + (z * z) / total
+    center = (p + (z * z) / (2 * total)) / denom
+    margin = z * math.sqrt((p * (1 - p) + (z * z) / (4 * total)) / total) / denom
+    return (center - margin, center + margin)
 
 
-# ---------------------------------------------------------------------------
-# Plot 3: Aggregated accuracy (one line per method, averaged over positions)
-# ---------------------------------------------------------------------------
-
-def plot_accuracy_aggregated(results: list[dict], out: Path):
-    """2 lines: vanilla vs rlm, averaged across all positions."""
-    buckets = _active_buckets(results)
-    x_arr = np.array(buckets, dtype=float)
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    for method, color, marker in [("vanilla", _BLUE, "o"), ("rlm", _RED, "o")]:
-        mr = [r for r in results if r["method"] == method]
-        accs = []
-        for b in buckets:
-            br = [r for r in mr if r["bucket_length"] == b]
-            if br:
-                accs.append(np.mean([float(r["scores"]["contains_answer"]) for r in br]) * 100)
-            else:
-                accs.append(np.nan)
-
-        ax.plot(x_arr, accs, f"{marker}-", color=color, markersize=8,
-                linewidth=2, label=method, zorder=4)
-
-        # Data labels
-        for xi, yi in zip(x_arr, accs):
-            if not np.isnan(yi):
-                ax.annotate(f"{yi:.0f}%", (xi, yi), textcoords="offset points",
-                            xytext=(0, 12), ha="center", fontsize=9, color=color,
-                            fontweight="bold")
-
-    ax.axhline(100, color=_GREEN, linestyle="--", linewidth=1.0, alpha=0.4,
-               label="perfect score")
-
-    ax.set_xlabel("Context Length")
-    ax.set_ylabel("Accuracy")
-    ax.set_ylim(-5, 120)
-    ax.yaxis.set_major_formatter(mticker.PercentFormatter(decimals=0))
-    _setup_xaxis(ax, buckets)
-    ax.legend(loc="upper right")
-    ax.set_title("RLM vs Vanilla accuracy (averaged across positions)")
-
-    fig.tight_layout()
-    fig.savefig(out, facecolor="white")
-    plt.close(fig)
-    print(f"  -> {out}")
-
-
-# ---------------------------------------------------------------------------
-# Plot 4: Accuracy by position (lines per method x length)
-# ---------------------------------------------------------------------------
-
-def plot_accuracy_by_position(results: list[dict], out: Path):
-    """Lines per (method x context_length), X=position."""
-    buckets = _active_buckets(results)
-    x_pos = np.array([10, 50, 90], dtype=float)
-
-    fig, ax = plt.subplots(figsize=(9, 6))
-
-    # Color gradient: short=light, long=dark
-    v_colors = plt.cm.Blues(np.linspace(0.35, 0.9, len(buckets)))
-    r_colors = plt.cm.Reds(np.linspace(0.35, 0.9, len(buckets)))
-
-    markers = ["o", "s", "^", "D", "v", "P", "*"]
-
-    for i, b in enumerate(buckets):
-        lbl = _LENGTH_LABELS[b]
-        mk = markers[i % len(markers)]
-
-        for method, cmap_colors, ls in [("vanilla", v_colors, "-"), ("rlm", r_colors, "--")]:
-            mr = [r for r in results if r["method"] == method and r["bucket_length"] == b]
-            ys = []
-            for pos in _POSITIONS:
-                hits = [r for r in mr if r.get("needle_position") == pos]
-                if hits:
-                    ys.append(float(hits[0]["scores"]["contains_answer"]) * 100)
-                else:
-                    ys.append(np.nan)
-
-            if all(np.isnan(y) for y in ys):
+def summarize_by_method_bucket(rows: list[dict]) -> dict[tuple[str, int], dict]:
+    summary: dict[tuple[str, int], dict] = {}
+    for method in METHODS:
+        for bucket in active_buckets(rows):
+            subset = [row for row in rows if row["method"] == method and row["bucket_length"] == bucket]
+            if not subset:
                 continue
-
-            ax.plot(x_pos, ys, marker=mk, linestyle=ls,
-                    color=cmap_colors[i], markersize=7, linewidth=1.6,
-                    label=f"{method} {lbl}", zorder=4)
-
-    ax.set_xlabel("Needle Position (% into document)")
-    ax.set_ylabel("Accuracy")
-    ax.set_ylim(-5, 115)
-    ax.set_xlim(0, 100)
-    ax.set_xticks([10, 50, 90])
-    ax.set_xticklabels(["10% (start)", "50% (middle)", "90% (end)"])
-    ax.yaxis.set_major_formatter(mticker.PercentFormatter(decimals=0))
-    ax.legend(loc="lower left", ncol=2, fontsize=8, columnspacing=1)
-    ax.set_title("Accuracy by needle position (per method and context length)")
-
-    fig.tight_layout()
-    fig.savefig(out, facecolor="white")
-    plt.close(fig)
-    print(f"  -> {out}")
+            successes = sum(1 for row in subset if row["correct"])
+            total = len(subset)
+            lo, hi = wilson_interval(successes, total)
+            latencies = [float(row.get("latency_s", 0.0)) for row in subset]
+            summary[(method, bucket)] = {
+                "n": total,
+                "accuracy": successes / total,
+                "accuracy_lo": lo,
+                "accuracy_hi": hi,
+                "latency_median": percentile(latencies, 50),
+                "latency_p25": percentile(latencies, 25),
+                "latency_p75": percentile(latencies, 75),
+                "timeout_rate": mean([1.0 if row["timeout"] else 0.0 for row in subset]),
+                "truncation_rate": mean([1.0 if row["truncated"] else 0.0 for row in subset]),
+            }
+    return summary
 
 
-# ---------------------------------------------------------------------------
-# Plot 5: RLM Advantage (delta per position)
-# ---------------------------------------------------------------------------
-
-def plot_advantage(results: list[dict], out: Path):
-    """3 lines (one per position) showing RLM% - Vanilla% across lengths."""
-    buckets = _active_buckets(results)
-    x_arr = np.array(buckets, dtype=float)
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    pos_colors = {0.1: "#2ca02c", 0.5: "#ff7f0e", 0.9: "#9467bd"}
-    pos_markers = {0.1: "o", 0.5: "s", 0.9: "^"}
-
-    for pos in _POSITIONS:
-        deltas = []
-        for b in buckets:
-            v_hits = [r for r in results if r["method"] == "vanilla"
-                      and r["bucket_length"] == b and r.get("needle_position") == pos]
-            r_hits = [r for r in results if r["method"] == "rlm"
-                      and r["bucket_length"] == b and r.get("needle_position") == pos]
-            if v_hits and r_hits:
-                v_acc = float(v_hits[0]["scores"]["contains_answer"]) * 100
-                r_acc = float(r_hits[0]["scores"]["contains_answer"]) * 100
-                deltas.append(r_acc - v_acc)
-            else:
-                deltas.append(np.nan)
-
-        ax.plot(x_arr, deltas, marker=pos_markers[pos], linestyle="-",
-                color=pos_colors[pos], markersize=8, linewidth=1.8,
-                label=f"position {_POS_NAMES[pos]}", zorder=4)
-
-    # Zero baseline
-    ax.axhline(0, color="#333333", linewidth=1.2, linestyle="-", zorder=2)
-
-    # Shade regions
-    ylims = ax.get_ylim()
-    ax.fill_between(x_arr, 0, 150, alpha=0.03, color=_GREEN, zorder=1)
-    ax.fill_between(x_arr, -150, 0, alpha=0.03, color=_RED, zorder=1)
-    ax.text(x_arr[-1] * 0.95, 5, "RLM wins", ha="right", fontsize=9,
-            color=_GREEN, fontstyle="italic", alpha=0.7)
-    ax.text(x_arr[-1] * 0.95, -10, "Vanilla wins", ha="right", fontsize=9,
-            color=_RED, fontstyle="italic", alpha=0.7)
-
-    ax.set_xlabel("Context Length")
-    ax.set_ylabel("Accuracy gap (RLM% - Vanilla%)")
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:+.0f}pp"))
-    _setup_xaxis(ax, buckets)
-    ax.legend(loc="upper left")
-    ax.set_title("RLM advantage over Vanilla (per needle position)")
-
-    fig.tight_layout()
-    fig.savefig(out, facecolor="white")
-    plt.close(fig)
-    print(f"  -> {out}")
+def summarize_task_types(rows: list[dict]) -> dict[tuple[str, str], dict]:
+    summary: dict[tuple[str, str], dict] = {}
+    task_types = sorted({row.get("task_type", "unknown") for row in rows})
+    for task_type in task_types:
+        for method in METHODS:
+            subset = [
+                row for row in rows if row.get("task_type") == task_type and row["method"] == method
+            ]
+            if not subset:
+                continue
+            latencies = [float(row.get("latency_s", 0.0)) for row in subset]
+            summary[(task_type, method)] = {
+                "n": len(subset),
+                "accuracy": mean([1.0 if row["correct"] else 0.0 for row in subset]),
+                "latency_median": percentile(latencies, 50),
+            }
+    return summary
 
 
-# ---------------------------------------------------------------------------
-# Plot 6: NIAH Heatmap
-# ---------------------------------------------------------------------------
-
-def plot_heatmap(results: list[dict], out: Path):
-    buckets = _active_buckets(results)
-    labels = [_LENGTH_LABELS[b] for b in buckets]
-    n_cols = len(buckets)
-    pos_labels = ["90%\n(end)", "50%\n(middle)", "10%\n(start)"]
-
-    fig, (ax_v, ax_r) = plt.subplots(1, 2, figsize=(max(8, 2.5 * n_cols), 4.5))
-
-    for ax, method, panel_title in [(ax_v, "vanilla", "Vanilla LLM"),
-                                     (ax_r, "rlm", "RLM (REPL)")]:
-        mr = [r for r in results if r["method"] == method]
-        grid = np.full((len(_POSITIONS), n_cols), np.nan)
-        annot = [[" " for _ in range(n_cols)] for _ in range(len(_POSITIONS))]
-
-        for r in mr:
-            pos = r.get("needle_position")
-            bkt = r["bucket_length"]
-            if pos in _POSITIONS and bkt in buckets:
-                row = _POSITIONS.index(pos)
-                col = buckets.index(bkt)
-                correct = r["scores"].get("contains_answer", False)
-                timed_out = r.get("timed_out", False)
-                if timed_out:
-                    grid[row, col] = 0.5; annot[row][col] = "TIMEOUT"
-                elif correct:
-                    grid[row, col] = 1.0; annot[row][col] = "PASS"
-                else:
-                    grid[row, col] = 0.0; annot[row][col] = "FAIL"
-
-        grid = grid[::-1]; annot = annot[::-1]
-        cmap = mcolors.ListedColormap(["#E85454", "#B0B0B0", "#4CAF73"])
-        norm = mcolors.BoundaryNorm([-0.25, 0.25, 0.75, 1.25], cmap.N)
-
-        ax.imshow(grid, cmap=cmap, norm=norm, aspect="auto",
-                  extent=[-0.5, n_cols - 0.5, -0.5, len(_POSITIONS) - 0.5])
-
-        for i in range(len(_POSITIONS)):
-            for j in range(n_cols):
-                txt = annot[i][j]
-                c = "white" if txt in ("PASS", "FAIL") else "#333333"
-                ax.text(j, len(_POSITIONS) - 1 - i, txt,
-                        ha="center", va="center", fontsize=11,
-                        fontweight="bold", color=c)
-
-        ax.set_xticks(range(n_cols)); ax.set_xticklabels(labels)
-        ax.set_yticks(range(len(_POSITIONS))); ax.set_yticklabels(pos_labels)
-        ax.set_xlabel("Context Length")
-        ax.set_title(panel_title, fontweight="bold", pad=10)
-        ax.tick_params(length=0)
-        for i in range(len(_POSITIONS) + 1):
-            ax.axhline(i - 0.5, color="white", linewidth=2)
-        for j in range(n_cols + 1):
-            ax.axvline(j - 0.5, color="white", linewidth=2)
-
-    ax_v.set_ylabel("Needle Position")
-    fig.suptitle("NIAH Accuracy Grid: Vanilla vs RLM",
-                 fontsize=14, fontweight="bold", y=1.02)
-    fig.tight_layout()
-    fig.savefig(out, facecolor="white", bbox_inches="tight")
-    plt.close(fig)
-    print(f"  -> {out}")
+def summarize_rlm(rows: list[dict]) -> dict[int, dict]:
+    rlm_rows = [row for row in rows if row["method"] == "rlm"]
+    summary: dict[int, dict] = {}
+    for bucket in active_buckets(rlm_rows):
+        subset = [row for row in rlm_rows if row["bucket_length"] == bucket]
+        if not subset:
+            continue
+        summary[bucket] = {
+            "iterations": mean([float(row.get("iterations", 0.0)) for row in subset]),
+            "sub_calls": mean([float(row.get("sub_calls", 0.0)) for row in subset]),
+            "timeout_rate": mean([1.0 if row["timeout"] else 0.0 for row in subset]),
+            "error_rate": mean([1.0 if row.get("repl_error_count", 0) > 0 else 0.0 for row in subset]),
+        }
+    return summary
 
 
-# ---------------------------------------------------------------------------
-# Plot 7: Dashboard (two-panel DeepSeek layout)
-# ---------------------------------------------------------------------------
+def summarize_pairing(rows: list[dict]) -> dict[int, dict[str, float]]:
+    paired: dict[tuple, dict[str, dict]] = defaultdict(dict)
+    for row in rows:
+        pair_key = (
+            row.get("task_type"),
+            row.get("context_length"),
+            row.get("query"),
+            row.get("answer"),
+        )
+        paired[pair_key][row["method"]] = row
 
-def plot_dashboard(results: list[dict], out: Path):
-    """Left: multiline accuracy. Right: multiline latency."""
-    buckets = _active_buckets(results)
-    x_arr = np.array(buckets, dtype=float)
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-
-    # Both panels: 6 lines each
-    for method in ["vanilla", "rlm"]:
-        for pos in _POSITIONS:
-            color, ls, marker = _LINE_STYLES[(method, pos)]
-            label = f"{method} @ {_POS_NAMES[pos]}"
-
-            accs, lats = [], []
-            for b in buckets:
-                hits = [r for r in results
-                        if r["method"] == method
-                        and r["bucket_length"] == b
-                        and r.get("needle_position") == pos]
-                if hits:
-                    accs.append(float(hits[0]["scores"]["contains_answer"]) * 100)
-                    lats.append(hits[0]["latency_s"])
-                else:
-                    accs.append(np.nan)
-                    lats.append(np.nan)
-
-            ax1.plot(x_arr, accs, marker=marker, linestyle=ls, color=color,
-                     markersize=6, linewidth=1.5, label=label, zorder=4)
-            ax2.plot(x_arr, lats, marker=marker, linestyle=ls, color=color,
-                     markersize=6, linewidth=1.5, label=label, zorder=4)
-
-    # Left panel config
-    ax1.axhline(100, color=_GREEN, linestyle="--", linewidth=1, alpha=0.4)
-    ax1.set_xlabel("Context Length")
-    ax1.set_ylabel("Accuracy")
-    ax1.set_ylim(-5, 115)
-    ax1.yaxis.set_major_formatter(mticker.PercentFormatter(decimals=0))
-    _setup_xaxis(ax1, buckets)
-    ax1.legend(loc="lower left", ncol=2, fontsize=8, columnspacing=1)
-    ax1.set_title("NIAH accuracy by method and needle position")
-
-    # Right panel config
-    ax2.set_xlabel("Context Length")
-    ax2.set_ylabel("Latency per response (seconds)")
-    _setup_xaxis(ax2, buckets)
-    ax2.legend(loc="upper left", ncol=2, fontsize=8, columnspacing=1)
-    ax2.set_title("NIAH latency by method and needle position")
-
-    fig.tight_layout()
-    fig.savefig(out, facecolor="white")
-    plt.close(fig)
-    print(f"  -> {out}")
-
-
-# ---------------------------------------------------------------------------
-# Plot 8: RLM Behaviour
-# ---------------------------------------------------------------------------
-
-def plot_rlm_behaviour(results: list[dict], out: Path):
-    rlm = [r for r in results if r["method"] == "rlm"]
-    if not rlm:
-        return
-
-    buckets = _active_buckets(results)
-    x_arr = np.array(buckets, dtype=float)
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    # One line per position showing iterations
-    for pos in _POSITIONS:
-        color = {"0.1": "#2ca02c", "0.5": "#ff7f0e", "0.9": "#9467bd"}[str(pos)]
-        marker = {"0.1": "o", "0.5": "s", "0.9": "^"}[str(pos)]
-
-        iters = []
-        for b in buckets:
-            hits = [r for r in rlm if r["bucket_length"] == b
-                    and r.get("needle_position") == pos]
-            if hits:
-                iters.append(hits[0].get("iterations", hits[0].get("rlm_iterations", 1)))
-            else:
-                iters.append(np.nan)
-
-        ax.plot(x_arr, iters, marker=marker, linestyle="-", color=color,
-                markersize=8, linewidth=1.8,
-                label=f"position {_POS_NAMES[pos]}", zorder=4)
-
-    # Scatter overlay: color by outcome
-    for r in rlm:
-        b = r["bucket_length"]
-        iters_val = r.get("iterations", r.get("rlm_iterations", 1))
-        correct = r["scores"].get("contains_answer", False)
-        timed_out = r.get("timed_out", False)
-        if timed_out:
-            ec, fc = _GRAY, _GRAY
-        elif correct:
-            ec, fc = _GREEN, _GREEN
+    summary: dict[int, dict[str, float]] = defaultdict(
+        lambda: {"both_correct": 0, "rlm_only": 0, "vanilla_only": 0, "both_wrong": 0, "n": 0}
+    )
+    for methods in paired.values():
+        vanilla = methods.get("vanilla")
+        rlm = methods.get("rlm")
+        if not vanilla or not rlm:
+            continue
+        bucket = vanilla["bucket_length"]
+        summary[bucket]["n"] += 1
+        if vanilla["correct"] and rlm["correct"]:
+            summary[bucket]["both_correct"] += 1
+        elif rlm["correct"] and not vanilla["correct"]:
+            summary[bucket]["rlm_only"] += 1
+        elif vanilla["correct"] and not rlm["correct"]:
+            summary[bucket]["vanilla_only"] += 1
         else:
-            ec, fc = _RED, _RED
+            summary[bucket]["both_wrong"] += 1
+    return summary
 
-        ax.scatter(b, iters_val, s=100, color=fc, edgecolor="white",
-                   linewidth=1.5, zorder=6, alpha=0.8)
 
-    ax.axhline(20, color=_GRAY, linestyle="--", linewidth=1, alpha=0.7,
-               label="max iterations")
+def summarize_niah_position(rows: list[dict], position: float) -> dict[tuple[str, int], dict]:
+    subset = [row for row in rows if row.get("task_type") == "niah" and row.get("needle_position") == position]
+    return summarize_by_method_bucket(subset)
 
-    # Custom legend for outcomes
-    extra = [
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=_GREEN,
-               markersize=9, label="Correct"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=_RED,
-               markersize=9, label="Wrong"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=_GRAY,
-               markersize=9, label="Timeout"),
-    ]
-    handles, labels = ax.get_legend_handles_labels()
-    ax.legend(handles=handles + extra, loc="upper left", ncol=2, fontsize=9)
 
-    ax.set_xlabel("Context Length")
-    ax.set_ylabel("REPL Iterations")
-    _setup_xaxis(ax, buckets)
-    ax.set_title("RLM REPL iterations by context length and position")
+def setup_context_axis(ax: plt.Axes, buckets: list[int]) -> np.ndarray:
+    positions = np.arange(len(buckets), dtype=float)
+    ax.set_xticks(positions)
+    ax.set_xticklabels([LENGTH_LABELS[bucket] for bucket in buckets])
+    ax.set_xlim(-0.35, len(buckets) - 0.65)
+    return positions
 
+
+def plot_accuracy_by_context(rows: list[dict], out_path: Path) -> None:
+    buckets = active_buckets(rows)
+    summary = summarize_by_method_bucket(rows)
+    fig, ax = plt.subplots(figsize=(7.2, 4.8))
+    x = setup_context_axis(ax, buckets)
+
+    for method in METHODS:
+        acc = []
+        lo = []
+        hi = []
+        for bucket in buckets:
+            stats = summary.get((method, bucket))
+            acc.append((stats["accuracy"] * 100) if stats else np.nan)
+            lo.append((stats["accuracy_lo"] * 100) if stats else np.nan)
+            hi.append((stats["accuracy_hi"] * 100) if stats else np.nan)
+        ax.fill_between(x, lo, hi, color=METHOD_COLORS[method], alpha=0.12, linewidth=0)
+        ax.plot(x, acc, color=METHOD_COLORS[method], marker=METHOD_MARKERS[method], label=METHOD_LABELS[method])
+
+    for idx, bucket in enumerate(buckets):
+        n = summary.get(("vanilla", bucket), {}).get("n", 0)
+        if n:
+            ax.annotate(f"n={n}", (x[idx], 102), ha="center", va="bottom", fontsize=8, color="#666666")
+
+    ax.set_title("Accuracy by context length")
+    ax.set_ylabel("Contains-answer accuracy")
+    ax.yaxis.set_major_formatter(mticker.PercentFormatter(decimals=0))
+    ax.set_ylim(0, 105)
+    ax.legend(loc="lower left")
     fig.tight_layout()
-    fig.savefig(out, facecolor="white")
+    fig.savefig(out_path)
     plt.close(fig)
-    print(f"  -> {out}")
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+def plot_latency_by_context(rows: list[dict], out_path: Path) -> None:
+    buckets = active_buckets(rows)
+    summary = summarize_by_method_bucket(rows)
+    fig, ax = plt.subplots(figsize=(7.2, 4.8))
+    x = setup_context_axis(ax, buckets)
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Generate DeepSeek-R1-Zero style plots for RLM experiments")
-    parser.add_argument("files", nargs="+", help="One or more .jsonl result files")
-    parser.add_argument("--merge", action="store_true",
-                        help="Merge all files into one combined dataset")
-    parser.add_argument("--task-type", default=None, help="Filter: niah | long_doc_qa")
-    parser.add_argument("--out", default=None, help="Output directory")
+    for method in METHODS:
+        median = []
+        p25 = []
+        p75 = []
+        for bucket in buckets:
+            stats = summary.get((method, bucket))
+            median.append(stats["latency_median"] if stats else np.nan)
+            p25.append(stats["latency_p25"] if stats else np.nan)
+            p75.append(stats["latency_p75"] if stats else np.nan)
+        ax.fill_between(x, p25, p75, color=METHOD_COLORS[method], alpha=0.12, linewidth=0)
+        ax.plot(x, median, color=METHOD_COLORS[method], marker=METHOD_MARKERS[method], label=METHOD_LABELS[method])
+
+    ax.set_title("Latency by context length")
+    ax.set_ylabel("Median latency (s)")
+    ax.set_yscale("log")
+    ax.legend(loc="upper left")
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+
+
+def plot_advantage_by_context(rows: list[dict], out_path: Path) -> None:
+    buckets = active_buckets(rows)
+    summary = summarize_by_method_bucket(rows)
+    fig, ax = plt.subplots(figsize=(7.2, 4.6))
+    x = setup_context_axis(ax, buckets)
+    delta = []
+    for bucket in buckets:
+        vanilla = summary.get(("vanilla", bucket))
+        rlm = summary.get(("rlm", bucket))
+        if vanilla and rlm:
+            delta.append((rlm["accuracy"] - vanilla["accuracy"]) * 100)
+        else:
+            delta.append(np.nan)
+
+    colors = ["#4c956c" if value >= 0 else "#8da9c4" for value in delta]
+    ax.bar(x, delta, color=colors, width=0.62, edgecolor="none")
+    ax.axhline(0, color="#444444", linewidth=1.0)
+    ax.set_title("RLM advantage by context length")
+    ax.set_ylabel("Accuracy gap (RLM - Vanilla)")
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda value, _pos: f"{value:+.0f} pp"))
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+
+
+def plot_outcome_decomposition(rows: list[dict], out_path: Path) -> None:
+    buckets = active_buckets(rows)
+    summary = summarize_pairing(rows)
+    fig, ax = plt.subplots(figsize=(7.4, 4.8))
+    x = setup_context_axis(ax, buckets)
+
+    outcome_order = ["both_correct", "rlm_only", "vanilla_only", "both_wrong"]
+    outcome_labels = {
+        "both_correct": "Both correct",
+        "rlm_only": "RLM-only win",
+        "vanilla_only": "Vanilla-only win",
+        "both_wrong": "Both wrong",
+    }
+    outcome_colors = {
+        "both_correct": "#6ba368",
+        "rlm_only": "#d9a441",
+        "vanilla_only": "#7f9ccf",
+        "both_wrong": "#c9c9c9",
+    }
+
+    bottom = np.zeros(len(buckets), dtype=float)
+    for outcome in outcome_order:
+        values = [summary.get(bucket, {}).get(outcome, 0) for bucket in buckets]
+        ax.bar(
+            x,
+            values,
+            bottom=bottom,
+            width=0.62,
+            color=outcome_colors[outcome],
+            edgecolor="none",
+            label=outcome_labels[outcome],
+        )
+        bottom += np.asarray(values, dtype=float)
+
+    for idx, bucket in enumerate(buckets):
+        total = int(summary.get(bucket, {}).get("n", 0))
+        if total:
+            ax.annotate(f"n={total}", (x[idx], total + 0.05), ha="center", va="bottom", fontsize=8, color="#666666")
+
+    ax.set_title("Paired outcome decomposition")
+    ax.set_ylabel("Number of paired tasks")
+    ax.legend(loc="upper left")
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+
+
+def plot_task_type_accuracy(rows: list[dict], out_path: Path) -> bool:
+    task_types = sorted({row.get("task_type", "unknown") for row in rows})
+    if len(task_types) <= 1:
+        return False
+
+    summary = summarize_task_types(rows)
+    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    x = np.arange(len(task_types), dtype=float)
+    width = 0.34
+
+    for offset, method in [(-width / 2, "vanilla"), (width / 2, "rlm")]:
+        values = []
+        for task_type in task_types:
+            stats = summary.get((task_type, method))
+            values.append((stats["accuracy"] * 100) if stats else np.nan)
+        ax.bar(x + offset, values, width=width, color=METHOD_COLORS[method], label=METHOD_LABELS[method])
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(task_types)
+    ax.set_title("Accuracy by task family")
+    ax.set_ylabel("Accuracy")
+    ax.yaxis.set_major_formatter(mticker.PercentFormatter(decimals=0))
+    ax.legend(loc="upper right")
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+    return True
+
+
+def plot_task_type_latency(rows: list[dict], out_path: Path) -> bool:
+    task_types = sorted({row.get("task_type", "unknown") for row in rows})
+    if len(task_types) <= 1:
+        return False
+
+    summary = summarize_task_types(rows)
+    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    x = np.arange(len(task_types), dtype=float)
+    width = 0.34
+
+    for offset, method in [(-width / 2, "vanilla"), (width / 2, "rlm")]:
+        values = []
+        for task_type in task_types:
+            stats = summary.get((task_type, method))
+            values.append(stats["latency_median"] if stats else np.nan)
+        ax.bar(x + offset, values, width=width, color=METHOD_COLORS[method], label=METHOD_LABELS[method])
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(task_types)
+    ax.set_title("Latency by task family")
+    ax.set_ylabel("Median latency (s)")
+    ax.legend(loc="upper right")
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+    return True
+
+
+def plot_niah_position_accuracy(rows: list[dict], position: float, out_path: Path) -> bool:
+    niah_rows = [row for row in rows if row.get("task_type") == "niah" and row.get("needle_position") == position]
+    if not niah_rows:
+        return False
+
+    buckets = active_buckets(niah_rows)
+    summary = summarize_niah_position(rows, position)
+    fig, ax = plt.subplots(figsize=(7.2, 4.8))
+    x = setup_context_axis(ax, buckets)
+
+    for method in METHODS:
+        values = []
+        for bucket in buckets:
+            stats = summary.get((method, bucket))
+            values.append((stats["accuracy"] * 100) if stats else np.nan)
+        ax.plot(x, values, color=METHOD_COLORS[method], marker=METHOD_MARKERS[method], label=METHOD_LABELS[method])
+
+    ax.set_title(f"NIAH accuracy at needle position {POSITION_LABELS[position]}")
+    ax.set_ylabel("Accuracy")
+    ax.yaxis.set_major_formatter(mticker.PercentFormatter(decimals=0))
+    ax.set_ylim(0, 105)
+    ax.legend(loc="lower left")
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+    return True
+
+
+def plot_rlm_iterations(rows: list[dict], out_path: Path) -> bool:
+    summary = summarize_rlm(rows)
+    if not summary:
+        return False
+
+    buckets = sorted(summary)
+    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    x = setup_context_axis(ax, buckets)
+    values = [summary[bucket]["iterations"] for bucket in buckets]
+    ax.plot(x, values, color="#7a3e9d", marker="o")
+    ax.set_title("RLM iterations by context length")
+    ax.set_ylabel("Average iterations")
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+    return True
+
+
+def plot_rlm_subcalls(rows: list[dict], out_path: Path) -> bool:
+    summary = summarize_rlm(rows)
+    if not summary:
+        return False
+
+    buckets = sorted(summary)
+    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    x = setup_context_axis(ax, buckets)
+    values = [summary[bucket]["sub_calls"] for bucket in buckets]
+    ax.plot(x, values, color="#c46210", marker="s")
+    ax.set_title("RLM sub-calls by context length")
+    ax.set_ylabel("Average sub-calls")
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+    return True
+
+
+def plot_rlm_failure_rates(rows: list[dict], out_path: Path) -> bool:
+    summary = summarize_rlm(rows)
+    if not summary:
+        return False
+
+    buckets = sorted(summary)
+    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    x = setup_context_axis(ax, buckets)
+    timeout_rate = [summary[bucket]["timeout_rate"] * 100 for bucket in buckets]
+    error_rate = [summary[bucket]["error_rate"] * 100 for bucket in buckets]
+    width = 0.32
+
+    ax.bar(x - width / 2, timeout_rate, width=width, color="#7f9ccf", label="Timeout rate")
+    ax.bar(x + width / 2, error_rate, width=width, color="#c97b7b", label="REPL error rate")
+    ax.set_title("RLM failure rates by context length")
+    ax.set_ylabel("Rate")
+    ax.yaxis.set_major_formatter(mticker.PercentFormatter(decimals=0))
+    ax.legend(loc="upper left")
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+    return True
+
+
+def clean_output_dir(out_dir: Path) -> None:
+    if not out_dir.exists():
+        return
+    for path in out_dir.glob("*.png"):
+        path.unlink()
+
+
+def generate_plots(prefix: str, rows: list[dict], out_dir: Path) -> None:
+    plot_accuracy_by_context(rows, out_dir / f"{prefix}_accuracy_by_context.png")
+    plot_latency_by_context(rows, out_dir / f"{prefix}_latency_by_context.png")
+    plot_advantage_by_context(rows, out_dir / f"{prefix}_advantage_by_context.png")
+    plot_outcome_decomposition(rows, out_dir / f"{prefix}_outcome_decomposition.png")
+    plot_task_type_accuracy(rows, out_dir / f"{prefix}_task_type_accuracy.png")
+    plot_task_type_latency(rows, out_dir / f"{prefix}_task_type_latency.png")
+    plot_niah_position_accuracy(rows, 0.1, out_dir / f"{prefix}_niah_accuracy_pos_10.png")
+    plot_niah_position_accuracy(rows, 0.5, out_dir / f"{prefix}_niah_accuracy_pos_50.png")
+    plot_niah_position_accuracy(rows, 0.9, out_dir / f"{prefix}_niah_accuracy_pos_90.png")
+    plot_rlm_iterations(rows, out_dir / f"{prefix}_rlm_iterations.png")
+    plot_rlm_subcalls(rows, out_dir / f"{prefix}_rlm_subcalls.png")
+    plot_rlm_failure_rates(rows, out_dir / f"{prefix}_rlm_failure_rates.png")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate clean research-style plots for RLM experiments")
+    parser.add_argument("files", nargs="+", help="One or more result JSONL files")
+    parser.add_argument("--merge", action="store_true", help="Merge inputs into one combined output set")
+    parser.add_argument("--task-type", default=None, help="Optional task type filter")
+    parser.add_argument("--out", default=None, help="Output directory (default: experiments/plots)")
+    parser.add_argument("--keep-old", action="store_true", help="Do not clear old PNG files in the output directory")
     args = parser.parse_args()
 
-    _apply_style()
+    apply_style()
 
     out_dir = Path(args.out) if args.out else Path("experiments") / "plots"
     out_dir.mkdir(parents=True, exist_ok=True)
+    if not args.keep_old:
+        clean_output_dir(out_dir)
 
-    runs: list[tuple[str, list[dict]]] = []
-    all_raw: list[dict] = []
-    for fpath in args.files:
-        path = Path(fpath)
+    loaded: list[tuple[str, list[dict]]] = []
+    merged_input: list[dict] = []
+    for file_name in args.files:
+        path = Path(file_name)
         if not path.exists():
-            print(f"ERROR: {path} not found"); sys.exit(1)
-        raw = load_jsonl(path)
+            print(f"ERROR: file not found: {path}")
+            sys.exit(1)
+        rows = load_jsonl(path)
         if args.task_type:
-            raw = [r for r in raw if r.get("task_type") == args.task_type]
-        enriched = enrich(raw)
-        runs.append((path.stem, enriched))
-        all_raw.extend(enriched)
-        print(f"Loaded {len(enriched)} results from {path.name}")
+            rows = [row for row in rows if row.get("task_type") == args.task_type]
+        enriched = enrich_rows(rows)
+        loaded.append((path.stem, enriched))
+        merged_input.extend(enriched)
+        print(f"Loaded {len(enriched)} rows from {path.name}")
 
-    if not runs:
-        print("No results."); sys.exit(1)
+    if not loaded:
+        print("No results loaded")
+        sys.exit(1)
 
-    if args.merge and len(runs) > 1:
-        merged = enrich(_merge_results(all_raw))
-        prefix = "combined"
-        data = merged
-        print(f"Merged into {len(merged)} unique results")
+    if args.merge:
+        merged = enrich_rows(merge_rows(merged_input))
+        generate_plots("combined", merged, out_dir)
     else:
-        prefix, data = runs[0]
+        for prefix, rows in loaded:
+            generate_plots(prefix, rows, out_dir)
 
-    print(f"\nGenerating plots -> {out_dir}/\n")
-
-    plot_accuracy_multiline(data,     out_dir / f"{prefix}_accuracy_multiline.png")
-    plot_latency_multiline(data,      out_dir / f"{prefix}_latency_multiline.png")
-    plot_accuracy_aggregated(data,    out_dir / f"{prefix}_accuracy_aggregated.png")
-    plot_accuracy_by_position(data,   out_dir / f"{prefix}_acc_by_position.png")
-    plot_advantage(data,              out_dir / f"{prefix}_advantage.png")
-    plot_heatmap(data,                out_dir / f"{prefix}_heatmap.png")
-    plot_dashboard(data,              out_dir / f"{prefix}_dashboard.png")
-    plot_rlm_behaviour(data,          out_dir / f"{prefix}_rlm_behaviour.png")
-
-    print(f"\nDone. 8 plots saved to {out_dir}/")
+    print(f"Plot files saved to {out_dir}/")
 
 
 if __name__ == "__main__":

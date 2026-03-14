@@ -100,17 +100,17 @@ RLM/
 - [ ] Compare accuracy, latency, and behavior traces
 - [ ] Identify where RLM starts helping
 - [ ] Document observed failure modes
+- [ ] Document when recursive-first enforcement changes iterations and sub-call behavior
 
-### Phase 4: Publication and Packaging
+### Phase 4: RL-on-RLM
+- [ ] Run RL / SFT experiments in Google Colab through the VS Code extension workflow
+- [ ] Evaluate whether RL materially improves recursive code generation, convergence, and long-context accuracy
+- [ ] Keep Muon and related optimizer ablations inside this cloud-based training phase
+
+### Phase 5: Publication and Packaging
 - [ ] Write the main research-style Medium article
 - [ ] Prepare GitHub Pages deployment with plots, methodology, and benchmark summaries
 - [ ] Package and publish a public Hugging Face model/checkpoint under the project identity so others can discover the RLM work
-
-### Phase 5: RL-on-RLM Final Phase
-- [ ] Move RL work to the final phase only, after core results and public write-up are stable
-- [ ] Run RL / SFT experiments in Google Colab through the VS Code extension workflow
-- [ ] Evaluate whether RL materially improves recursive code generation, convergence, and long-context accuracy
-- [ ] Keep Muon and related optimizer ablations inside this final cloud-based training phase
 
 ---
 
@@ -120,6 +120,12 @@ RLM/
 - Vanilla: direct inference with `qwen3.5:2b`
 - RLM: recursive inference with `qwen3.5:2b`
 - Isolates architecture difference from model-quality differences
+
+### Long-context recursive-first runtime policy
+- Long contexts should not be allowed to terminate in a one-shot regex path by default
+- The runtime can reject premature `FINAL()` calls until the model gathers focused evidence
+- At least one sub-call is required on long contexts before finalization
+- REPL helper functions reduce friction for chunking, slicing, and evidence-driven search
 
 ### Structured logging
 - One run file per experiment in `experiments/`
@@ -153,7 +159,7 @@ RLM/
 ## Open Questions
 
 1. Does `qwen3.5:2b` reliably generate executable REPL code?
-2. What prompt design minimizes invalid code and looping?
+2. What prompt design best balances code validity with genuinely recursive behavior?
 3. What is the practical context-size crossover where RLM starts winning?
 4. How should we enforce safe REPL execution for local experiments?
 5. Which benchmark mix gives fair and realistic conclusions?

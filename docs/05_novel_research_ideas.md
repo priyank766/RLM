@@ -132,8 +132,8 @@ This is useful for document intelligence and public demos, but it is secondary t
 | Async parallel sub-calls | RTX 4050 sufficient | Low | High | **#1** |
 | Structured output REPL | RTX 4050 sufficient | Low | Medium | **#2** |
 | Adaptive recursion depth | Cloud GPU | High | Very High | #3 |
-| Muon for RLM post-training | Colab / cloud GPU | Medium | High | **Final phase** |
-| PRM / RL for code quality | Colab / cloud GPU | Very High | Very High | **Final phase** |
+| Muon for RLM post-training | Colab / cloud GPU | Medium | High | **Phase 4** |
+| PRM / RL for code quality | Colab / cloud GPU | Very High | Very High | **Phase 4** |
 
 ---
 
@@ -158,24 +158,24 @@ Phase 1: Build and stabilize the comparison framework
 Phase 2: Run benchmark suite and trajectory collection
   -> Establish where RLM wins and where it fails
 
-Phase 3: Write the analysis and prepare public artifacts
-  -> Medium article + GitHub Pages + Hugging Face release plan
+Phase 3: Write the analysis and prepare training/publication inputs
+  -> Lock findings, clean trajectories, and define the story we want to test
 
-Phase 4: Publish the core project publicly
-  -> Share results before training claims get ahead of the evidence
-
-Phase 5: RL-on-RLM final phase
+Phase 4: RL-on-RLM
   -> Use Google Colab through the VS Code extension workflow
   -> Run SFT / RL experiments and evaluate whether training actually helps
+
+Phase 5: Publish the core project publicly
+  -> Medium article + GitHub Pages + Hugging Face release
 ```
 
 ---
 
 ## Practical Note on RL Phase
 
-RL should stay last for this project.
-- The base system and benchmark story need to be stable first.
-- Publication of the core inference-time RLM work should not depend on a successful RL outcome.
+RL now comes before publication for this project.
+- The base system and benchmark story still need to be stable first.
+- We want to test whether training materially improves the public story before publishing it.
 - Colab + VS Code extension is the right place to try the training phase because it keeps local setup lighter while still letting us work from the same codebase.
 
 ---

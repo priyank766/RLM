@@ -322,3 +322,43 @@ SFT dataset built: 16 clean examples from 52 trajectories (4K-64K context)
 - The core inference-time RLM story should stand on its own before training claims
 - Public artifacts should ship from stable benchmark results, not from unfinished RL work
 - Hugging Face release improves discoverability for people specifically searching for RLM-related models
+
+## [2026-03-14] - Session 10: Recursive-First Runtime Fix
+
+**Problem diagnosed:**
+- RLM trajectories were mostly `iterations = 1` and `sub_calls = 0`
+- This was not a plotting issue; the runtime and prompt were rewarding one-shot answers
+- On long contexts, the model was often solving or failing from the root call without any recursive evidence gathering
+
+**Root causes:**
+- The prompt taught a regex-first, answer-immediately workflow
+- The runtime accepted early `FINAL()` calls without requiring focused exploration
+- The existing benchmark mix allowed too many direct retrieval wins without real recursion
+
+**Changes made:**
+- Rewrote `prompts/rlm_system.txt` to make long-context handling recursive-first
+- Expanded `src/rlm/repl.py` with helper functions for slicing, chunking, pattern windows, and targeted sub-queries
+- Updated `src/rlm/rlm_repl.py` to:
+  - reject premature `FINAL()` on long contexts
+  - require at least one focused sub-call before finalization on long contexts
+  - detect repeated near-identical strategies and push recovery feedback
+
+**Verification:**
+- Syntax check passed for the updated runtime files
+- A deterministic fake-client run confirmed the new policy path:
+  - first premature finalization was rejected
+  - the loop continued to a second iteration
+  - `sub_calls` increased to `1`
+
+**Current limitation:**
+- Real Ollama verification was not completed in-session because the local Ollama endpoint was unavailable from the sandbox at the time of testing
+
+## [2026-03-14] - Session 11: Roadmap Order Swapped Back
+
+**Planning change:**
+- RL-on-RLM now comes before publication again
+- Publication moves after the RL phase
+
+**Reasoning:**
+- We want to test training impact before locking the public narrative
+- Medium, GitHub Pages, and Hugging Face should reflect the stronger post-RL result if the training phase produces one

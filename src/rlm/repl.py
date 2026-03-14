@@ -10,18 +10,9 @@ class LocalREPL:
     """
     exec-based Python REPL with persistent namespace.
 
-    The full context P is stored as a variable here — never placed
-    in the LLM's context window. The LLM writes Python code cells
-    that get executed here iteratively.
-
-    Injects into namespace:
-        context     — the full document string
-        query       — the question being answered
-        context_len — length of context in chars
-        llm_query() — recursive sub-LM call function
-        FINAL()     — signal final answer as string
-        FINAL_VAR() — signal a variable as final answer
-        re, json    — pre-imported for convenience
+    The full context is stored here as a variable and never placed in the
+    model context window. The model writes Python code cells that get
+    executed iteratively.
     """
 
     def __init__(self):
@@ -36,41 +27,104 @@ class LocalREPL:
     ) -> None:
         """Initialise namespace. Must be called before execute()."""
         self._final_set = False
-
-        # Capture self reference for closures below
         repl = self
 
         def FINAL(answer: str) -> None:
-            """Signal the final answer. Ends the RLM session."""
             repl._namespace["__final__"] = str(answer)
             repl._final_set = True
 
         def FINAL_VAR(var: Any) -> None:
-            """Signal that a variable holds the final answer."""
             repl._namespace["__final__"] = str(var)
             repl._final_set = True
 
+        def head(n: int = 500) -> str:
+            return context[: max(0, n)]
+
+        def tail(n: int = 500) -> str:
+            if n <= 0:
+                return ""
+            return context[-n:]
+
+        def context_slice(start: int, end: int) -> str:
+            return context[max(0, start): max(0, end)]
+
+        def chunk_text(size: int, overlap: int = 200) -> list[str]:
+            if size <= 0:
+                raise ValueError("size must be > 0")
+            if overlap < 0:
+                raise ValueError("overlap must be >= 0")
+            step = max(1, size - overlap)
+            chunks: list[str] = []
+            for start in range(0, len(context), step):
+                end = min(len(context), start + size)
+                chunks.append(context[start:end])
+                if end >= len(context):
+                    break
+            return chunks
+
+        def keyword_windows(keyword: str, window: int = 400, limit: int = 8) -> list[str]:
+            if not keyword:
+                return []
+            spans: list[str] = []
+            seen: set[tuple[int, int]] = set()
+            for match in re.finditer(re.escape(keyword), context, re.IGNORECASE):
+                start = max(0, match.start() - window)
+                end = min(len(context), match.end() + window)
+                key = (start, end)
+                if key in seen:
+                    continue
+                seen.add(key)
+                spans.append(context[start:end])
+                if len(spans) >= limit:
+                    break
+            return spans
+
+        def regex_windows(pattern: str, window: int = 400, limit: int = 8, flags: int = 0) -> list[str]:
+            if not pattern:
+                return []
+            spans: list[str] = []
+            seen: set[tuple[int, int]] = set()
+            for match in re.finditer(pattern, context, flags):
+                start = max(0, match.start() - window)
+                end = min(len(context), match.end() + window)
+                key = (start, end)
+                if key in seen:
+                    continue
+                seen.add(key)
+                spans.append(context[start:end])
+                if len(spans) >= limit:
+                    break
+            return spans
+
+        def query_chunks(chunks: list[str], prompt_template: str, limit: int | None = None) -> list[str]:
+            selected = chunks if limit is None else chunks[:limit]
+            answers: list[str] = []
+            for index, chunk in enumerate(selected):
+                prompt = prompt_template.format(chunk=chunk, query=query, index=index)
+                answers.append(llm_query_fn(prompt))
+            return answers
+
         self._namespace = {
             "__builtins__": __builtins__,
-            # RLM environment
             "context": context,
             "query": query,
             "context_len": len(context),
             "llm_query": llm_query_fn,
+            "query_chunks": query_chunks,
             "FINAL": FINAL,
             "FINAL_VAR": FINAL_VAR,
-            # Convenience pre-imports
+            "head": head,
+            "tail": tail,
+            "context_slice": context_slice,
+            "chunk_text": chunk_text,
+            "keyword_windows": keyword_windows,
+            "regex_windows": regex_windows,
             "re": re,
             "json": _json,
         }
 
     def execute(self, code: str) -> tuple[str, str]:
-        """
-        Execute one code cell in the persistent namespace.
-
-        Returns:
-            (stdout, stderr) as strings. stderr is non-empty on error.
-        """
+        """Execute one code cell in the persistent namespace."""
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
         old_stdout, old_stderr = sys.stdout, sys.stderr
@@ -80,10 +134,9 @@ class LocalREPL:
         try:
             exec(code, self._namespace)  # noqa: S102
         except SystemExit:
-            # Don't let LLM-generated code kill the process
             sys.stdout = old_stdout
             sys.stderr = old_stderr
-            return "", "SystemExit called — ignored by REPL"
+            return "", "SystemExit called - ignored by REPL"
         except Exception:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
@@ -94,22 +147,27 @@ class LocalREPL:
 
         return stdout_buf.getvalue(), stderr_buf.getvalue()
 
+    def clear_final(self) -> None:
+        """Undo a premature FINAL() call so the loop can continue."""
+        self._final_set = False
+        self._namespace.pop("__final__", None)
+
     @property
     def is_final(self) -> bool:
-        """True once FINAL() or FINAL_VAR() has been called."""
         return self._final_set
 
     @property
     def final_answer(self) -> str | None:
-        """The answer set by FINAL() / FINAL_VAR(), or None."""
         return self._namespace.get("__final__")
 
     def user_vars(self) -> list[str]:
-        """Variable names created by LLM code (excludes injected names)."""
-        _injected = {
+        injected = {
             "__builtins__", "__final__",
             "context", "query", "context_len",
-            "llm_query", "FINAL", "FINAL_VAR",
+            "llm_query", "query_chunks",
+            "FINAL", "FINAL_VAR",
+            "head", "tail", "context_slice",
+            "chunk_text", "keyword_windows", "regex_windows",
             "re", "json",
         }
-        return [k for k in self._namespace if k not in _injected]
+        return [name for name in self._namespace if name not in injected]
