@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.uv/
+
+# IDE
+.vscode/
+.idea/
+
+# Experiment outputs (keep .gitkeep, ignore actual results)
+experiments/*.jsonl
+experiments/*.json
+
+# OS
+.DS_Store
+Thumbs.db
