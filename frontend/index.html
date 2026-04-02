@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RLM Visualizer — Step-by-Step</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #1c2333;
+            --bg-card: #21262d;
+            --border: #30363d;
+            --border-bright: #484f58;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-red: #f85149;
+            --accent-orange: #d29922;
+            --accent-purple: #bc8cff;
+            --accent-cyan: #39d353;
+            --glow-blue: rgba(88, 166, 255, 0.15);
+            --glow-green: rgba(63, 185, 80, 0.15);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --------- Top Bar --------- */
+        .topbar {
+            height: 56px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 16px;
+        }
+
+        .topbar-logo {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--accent-blue);
+            letter-spacing: 1px;
+            white-space: nowrap;
+        }
+
+        .topbar-logo span {
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .topbar-status {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+
+        .status-dot.connected { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+        .status-dot.running { background: var(--accent-orange); animation: pulse 1.2s infinite; }
+        .status-dot.done { background: var(--accent-green); }
+        .status-dot.error { background: var(--accent-red); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* --------- Layout --------- */
+        .main-layout {
+            display: flex;
+            height: calc(100vh - 56px);
+        }
+
+        /* --------- Sidebar --------- */
+        .sidebar {
+            width: 280px;
+            min-width: 280px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        .steps-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .step-item {
+            padding: 12px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 4px;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+        }
+
+        .step-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .step-item.active {
+            background: var(--bg-tertiary);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 12px var(--glow-blue);
+        }
+
+        .step-item.running {
+            border-color: var(--accent-orange);
+            box-shadow: 0 0 12px rgba(210, 153, 34, 0.15);
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        .step-icon {
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .step-icon.thinking { background: rgba(210,153,34,0.2); color: var(--accent-orange); }
+        .step-icon.code { background: rgba(88,166,255,0.2); color: var(--accent-blue); }
+        .step-icon.done { background: rgba(63,185,80,0.2); color: var(--accent-green); }
+        .step-icon.error { background: rgba(248,81,73,0.2); color: var(--accent-red); }
+        .step-icon.reject { background: rgba(210,153,34,0.2); color: var(--accent-orange); }
+        .step-icon.final { background: rgba(63,185,80,0.2); color: var(--accent-green); }
+
+        .step-title {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .step-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            padding-left: 30px;
+        }
+
+        /* --------- Input Panel --------- */
+        .input-panel {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+
+        .input-group {
+            margin-bottom: 8px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .input-group textarea, .input-group input {
+            width: 100%;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            padding: 8px 10px;
+            resize: vertical;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .input-group textarea:focus, .input-group input:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .btn-run {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #238636, #2ea043);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-run:hover { filter: brightness(1.15); transform: translateY(-1px); }
+        .btn-run:active { transform: translateY(0); }
+        .btn-run:disabled { opacity: 0.5; cursor: not-allowed; transform: none; filter: none; }
+
+        /* --------- Main Panel --------- */
+        .main-panel {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 32px;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state h2 {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* --------- Step Detail --------- */
+        .step-detail {
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .detail-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .detail-header h2 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .detail-badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-thinking { background: rgba(210,153,34,0.15); color: var(--accent-orange); }
+        .badge-code { background: rgba(88,166,255,0.15); color: var(--accent-blue); }
+        .badge-success { background: rgba(63,185,80,0.15); color: var(--accent-green); }
+        .badge-error { background: rgba(248,81,73,0.15); color: var(--accent-red); }
+
+        .detail-section {
+            margin-bottom: 20px;
+        }
+
+        .detail-section-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .detail-section-title .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .code-block {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12.5px;
+            line-height: 1.7;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .code-block.root-response {
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .code-block.python-code {
+            border-left: 3px solid var(--accent-purple);
+        }
+
+        .code-block.stdout {
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .code-block.stderr {
+            border-left: 3px solid var(--accent-red);
+            color: var(--accent-red);
+        }
+
+        .code-block.sub-call {
+            border-left: 3px solid var(--accent-cyan);
+        }
+
+        .code-block.answer {
+            border-left: 3px solid var(--accent-green);
+            background: rgba(63, 185, 80, 0.08);
+            font-size: 15px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* --------- Sub-call card --------- */
+        .sub-call-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 10px;
+        }
+
+        .sub-call-header {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent-cyan);
+            margin-bottom: 8px;
+        }
+
+        .sub-call-section {
+            margin-bottom: 8px;
+        }
+
+        .sub-call-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .sub-call-content {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            max-height: 120px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* --------- Final Answer Banner --------- */
+        .final-banner {
+            background: linear-gradient(135deg, rgba(63,185,80,0.12), rgba(63,185,80,0.04));
+            border: 1px solid rgba(63,185,80,0.3);
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-top: 20px;
+        }
+
+        .final-banner h3 {
+            font-size: 14px;
+            color: var(--accent-green);
+            margin-bottom: 12px;
+        }
+
+        .final-answer-text {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        .final-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .final-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .final-stat strong {
+            color: var(--text-primary);
+        }
+
+        /* --------- Scrollbar --------- */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
+
+        /* --------- Spinner --------- */
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent-orange);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top Bar -->
+    <div class="topbar">
+        <div class="topbar-logo">RLM <span>Visualizer</span></div>
+        <div class="topbar-status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Disconnected</span>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">Steps Timeline</div>
+            <div class="steps-list" id="stepsList"></div>
+
+            <!-- Input Form -->
+            <div class="input-panel">
+                <div class="input-group">
+                    <label>Context</label>
+                    <textarea id="contextInput" rows="3" placeholder="Paste your document / text here..."></textarea>
+                </div>
+                <div class="input-group">
+                    <label>Query</label>
+                    <input type="text" id="queryInput" placeholder="What do you want to find?" />
+                </div>
+                <button class="btn-run" id="btnRun" onclick="startRun()">▸ Run RLM</button>
+            </div>
+        </div>
+
+        <!-- Main Panel -->
+        <div class="main-panel" id="mainPanel">
+            <div class="empty-state" id="emptyState">
+                <div class="empty-state-icon">🔍</div>
+                <h2>Ready to Visualize</h2>
+                <p>Enter context and a query in the sidebar, then click Run.<br>
+                Watch the RLM process step-by-step in real time.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --------- State ---------
+        let ws = null;
+        let steps = []; // [{type, iteration, data}]
+        let activeStepIndex = -1;
+        let isRunning = false;
+
+        // --------- WebSocket ---------
+        function connect() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+            ws.onopen = () => {
+                setStatus('connected', 'Connected');
+            };
+
+            ws.onmessage = (evt) => {
+                const event = JSON.parse(evt.data);
+                handleEvent(event);
+            };
+
+            ws.onclose = () => {
+                setStatus('', 'Disconnected');
+                setTimeout(connect, 2000);
+            };
+
+            ws.onerror = () => {
+                setStatus('error', 'Connection error');
+            };
+        }
+
+        function setStatus(cls, text) {
+            document.getElementById('statusDot').className = 'status-dot ' + cls;
+            document.getElementById('statusText').textContent = text;
+        }
+
+        // --------- Event Handling ---------
+        function handleEvent(event) {
+            switch (event.type) {
+                case 'init':
+                    steps = [];
+                    addStep('init', 0, event, '⚡ Initialized', `Context: ${event.context_length.toLocaleString()} chars`);
+                    break;
+
+                case 'root_thinking':
+                    addStep('thinking', event.iteration, event, `Step ${event.iteration} — Thinking…`, 'Root LM generating…');
+                    break;
+
+                case 'root_response':
+                    updateLastStep('code', event, `Step ${event.iteration} — Code Generated`, `${event.code.split('\n').length} lines`);
+                    break;
+
+                case 'repl_exec':
+                    updateLastStep(
+                        event.stderr ? 'error' : 'done',
+                        event,
+                        `Step ${event.iteration} — ${event.stderr ? 'Error' : 'Executed'}`,
+                        event.sub_calls.length > 0
+                            ? `${event.sub_calls.length} sub-call(s)`
+                            : (event.stderr ? 'REPL error' : (event.stdout ? 'Output received' : 'No output'))
+                    );
+                    break;
+
+                case 'final_reject':
+                    addStep('reject', event.iteration, event, `Step ${event.iteration} — FINAL Rejected`, event.reason.slice(0, 60));
+                    break;
+
+                case 'final':
+                    addStep('final', event.iteration, event, '✓ Answer Found', `${event.latency_s}s, ${event.total_iterations} steps`);
+                    isRunning = false;
+                    document.getElementById('btnRun').disabled = false;
+                    document.getElementById('btnRun').textContent = '▸ Run RLM';
+                    setStatus('done', 'Complete');
+                    break;
+
+                case 'timeout':
+                    addStep('error', event.total_iterations, event, '⏱ Timeout', `${event.total_iterations} iterations, ${event.latency_s}s`);
+                    isRunning = false;
+                    document.getElementById('btnRun').disabled = false;
+                    document.getElementById('btnRun').textContent = '▸ Run RLM';
+                    setStatus('error', 'Timeout');
+                    break;
+
+                case 'error':
+                    addStep('error', event.iteration || 0, event, '✗ Error', event.message || 'Unknown');
+                    isRunning = false;
+                    document.getElementById('btnRun').disabled = false;
+                    document.getElementById('btnRun').textContent = '▸ Run RLM';
+                    setStatus('error', 'Error');
+                    break;
+            }
+        }
+
+        function addStep(type, iteration, data, title, meta) {
+            const step = { type, iteration, data, title, meta };
+            steps.push(step);
+            renderSidebar();
+            selectStep(steps.length - 1);
+        }
+
+        function updateLastStep(type, data, title, meta) {
+            if (steps.length === 0) return;
+            const last = steps[steps.length - 1];
+            // Merge data
+            last.type = type;
+            last.data = { ...last.data, ...data };
+            last.title = title;
+            last.meta = meta;
+            renderSidebar();
+            if (activeStepIndex === steps.length - 1) {
+                renderDetail(last);
+            }
+        }
+
+        // --------- Sidebar Rendering ---------
+        function renderSidebar() {
+            const list = document.getElementById('stepsList');
+            list.innerHTML = '';
+
+            steps.forEach((step, i) => {
+                const el = document.createElement('div');
+                el.className = 'step-item' + (i === activeStepIndex ? ' active' : '') + (step.type === 'thinking' ? ' running' : '');
+                el.onclick = () => selectStep(i);
+
+                const iconClass = step.type === 'thinking' ? 'thinking'
+                    : step.type === 'code' ? 'code'
+                    : step.type === 'done' ? 'done'
+                    : step.type === 'error' ? 'error'
+                    : step.type === 'reject' ? 'reject'
+                    : step.type === 'final' ? 'final'
+                    : 'code';
+
+                const iconText = step.type === 'thinking' ? '…'
+                    : step.type === 'final' ? '✓'
+                    : step.type === 'error' ? '✗'
+                    : step.type === 'reject' ? '↩'
+                    : step.type === 'init' ? '⚡'
+                    : step.iteration || '•';
+
+                el.innerHTML = `
+                    <div class="step-header">
+                        <div class="step-icon ${iconClass}">${step.type === 'thinking' ? '<div class="spinner"></div>' : iconText}</div>
+                        <div class="step-title">${step.title}</div>
+                    </div>
+                    <div class="step-meta">${step.meta}</div>
+                `;
+                list.appendChild(el);
+            });
+
+            // Auto-scroll
+            list.scrollTop = list.scrollHeight;
+        }
+
+        function selectStep(index) {
+            activeStepIndex = index;
+            renderSidebar();
+            renderDetail(steps[index]);
+        }
+
+        // --------- Detail Rendering ---------
+        function renderDetail(step) {
+            const panel = document.getElementById('mainPanel');
+            const emptyEl = document.getElementById('emptyState');
+            if (emptyEl) emptyEl.style.display = 'none';
+
+            const d = step.data;
+            let html = '<div class="step-detail">';
+
+            // Header
+            const badgeClass = step.type === 'final' ? 'badge-success'
+                : step.type === 'error' ? 'badge-error'
+                : step.type === 'thinking' ? 'badge-thinking'
+                : 'badge-code';
+            html += `<div class="detail-header">
+                <h2>${step.title}</h2>
+                <span class="detail-badge ${badgeClass}">${step.type.toUpperCase()}</span>
+            </div>`;
+
+            // Init event
+            if (d.type === 'init') {
+                html += section('Context Info', `Context length: ${d.context_length.toLocaleString()} characters\nLong-context mode: ${d.long_context_mode ? 'Yes' : 'No'}\nMax iterations: ${d.max_iterations}`, 'root-response');
+                html += section('Query', d.query, 'root-response');
+                html += section('Context Preview', d.context_preview || '', 'stdout');
+            }
+
+            // Root response + code
+            if (d.raw_response) {
+                html += section('Root LM Response', d.raw_response, 'root-response');
+            }
+            if (d.code) {
+                html += section('Extracted Python Code', d.code, 'python-code');
+            }
+
+            // REPL output
+            if (d.stdout !== undefined && d.stdout !== '') {
+                html += section('REPL stdout', d.stdout, 'stdout');
+            }
+            if (d.stderr !== undefined && d.stderr !== '') {
+                html += section('REPL stderr', d.stderr, 'stderr');
+            }
+
+            // Sub-calls
+            if (d.sub_calls && d.sub_calls.length > 0) {
+                html += `<div class="detail-section">
+                    <div class="detail-section-title"><div class="dot" style="background:var(--accent-cyan)"></div> Sub-LM Calls (${d.sub_calls.length})</div>`;
+                d.sub_calls.forEach(sc => {
+                    html += `<div class="sub-call-card">
+                        <div class="sub-call-header">Sub-call #${sc.call_index}</div>
+                        <div class="sub-call-section">
+                            <div class="sub-call-label">Prompt sent to sub-LM:</div>
+                            <div class="sub-call-content">${escapeHtml(sc.prompt)}</div>
+                        </div>
+                        <div class="sub-call-section">
+                            <div class="sub-call-label">Sub-LM Response:</div>
+                            <div class="sub-call-content">${escapeHtml(sc.response)}</div>
+                        </div>
+                    </div>`;
+                });
+                html += '</div>';
+            }
+
+            // Final reject
+            if (d.type === 'final_reject') {
+                html += section('Rejection Reason', d.reason, 'stderr');
+                html += section('Proposed Answer (rejected)', d.answer_preview, 'root-response');
+            }
+
+            // Final answer
+            if (d.type === 'final') {
+                html += `<div class="final-banner">
+                    <h3>✓ FINAL ANSWER</h3>
+                    <div class="final-answer-text">${escapeHtml(d.answer)}</div>
+                    <div class="final-stats">
+                        <div class="final-stat">Iterations: <strong>${d.total_iterations}</strong></div>
+                        <div class="final-stat">Sub-calls: <strong>${d.total_sub_calls}</strong></div>
+                        <div class="final-stat">REPL Errors: <strong>${d.repl_errors}</strong></div>
+                        <div class="final-stat">Latency: <strong>${d.latency_s}s</strong></div>
+                    </div>
+                </div>`;
+            }
+
+            // Timeout
+            if (d.type === 'timeout') {
+                html += `<div class="final-banner" style="border-color:rgba(248,81,73,0.3);background:linear-gradient(135deg,rgba(248,81,73,0.12),rgba(248,81,73,0.04));">
+                    <h3 style="color:var(--accent-red);">⏱ TIMEOUT — No Answer</h3>
+                    <div class="final-stats">
+                        <div class="final-stat">Iterations: <strong>${d.total_iterations}</strong></div>
+                        <div class="final-stat">Sub-calls: <strong>${d.total_sub_calls}</strong></div>
+                        <div class="final-stat">REPL Errors: <strong>${d.repl_errors}</strong></div>
+                        <div class="final-stat">Latency: <strong>${d.latency_s}s</strong></div>
+                    </div>
+                </div>`;
+            }
+
+            html += '</div>';
+            panel.innerHTML = html;
+        }
+
+        function section(title, content, codeClass) {
+            const dotColor = codeClass === 'stderr' ? 'var(--accent-red)'
+                : codeClass === 'stdout' ? 'var(--accent-green)'
+                : codeClass === 'python-code' ? 'var(--accent-purple)'
+                : 'var(--accent-blue)';
+            return `<div class="detail-section">
+                <div class="detail-section-title"><div class="dot" style="background:${dotColor}"></div> ${title}</div>
+                <div class="code-block ${codeClass}">${escapeHtml(content)}</div>
+            </div>`;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // --------- Run ---------
+        function startRun() {
+            const context = document.getElementById('contextInput').value.trim();
+            const query = document.getElementById('queryInput').value.trim();
+
+            if (!context || !query) {
+                alert('Please enter both context and query.');
+                return;
+            }
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Not connected to server. Check if the viz server is running.');
+                return;
+            }
+
+            isRunning = true;
+            steps = [];
+            activeStepIndex = -1;
+            document.getElementById('stepsList').innerHTML = '';
+            document.getElementById('mainPanel').innerHTML = '<div class="empty-state" id="emptyState" style="display:none"></div>';
+            document.getElementById('btnRun').disabled = true;
+            document.getElementById('btnRun').textContent = 'Running…';
+            setStatus('running', 'Running RLM…');
+
+            ws.send(JSON.stringify({ action: 'run', context, query }));
+        }
+
+        // --------- Init ---------
+        connect();
+    </script>
+</body>
+</html>

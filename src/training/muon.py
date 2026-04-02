@@ -14,6 +14,12 @@ Usage:
     - Apply Muon to 2D weight matrices (attention Q/K/V/O, MLP up/down)
     - Use AdamW for 1D parameters (embeddings, layernorm, lm_head)
     - This split is standard practice with Muon
+
+Changes from original audit (2026-03-20):
+    - Added momentum warmup (0.85 → 0.95 over configurable steps)
+    - Added max_grad_norm clipping
+    - Fixed split_params_for_muon to exclude embed_tokens and lm_head
+    - Adjusted default LR from 0.02 → 0.005 for QLoRA compatibility
 """
 
 import torch
@@ -28,7 +34,7 @@ def _newton_schulz_5(G: torch.Tensor, steps: int = 5, eps: float = 1e-7) -> torc
     This gives us the "direction" of the gradient in matrix space,
     stripping out the magnitude (singular values).
 
-    The iteration: X_{k+1} = 1.5 * X_k - 0.5 * X_k @ X_k^T @ X_k
+    The iteration: X_{k+1} = a*X + b*X@X^T@X + c*X@X^T@X@X^T@X
     converges to the orthogonal polar factor.
     """
     assert G.ndim == 2, "Newton-Schulz only works on 2D matrices"
@@ -65,25 +71,54 @@ class Muon(Optimizer):
 
     Args:
         params: Parameters to optimize (should be 2D weight matrices only)
-        lr: Learning rate (default: 0.02)
-        momentum: Nesterov momentum coefficient (default: 0.95)
+        lr: Learning rate (default: 0.005 — tuned for QLoRA LoRA adapters)
+        momentum: Target momentum coefficient (default: 0.95)
+        momentum_warmup_steps: Steps to warmup momentum from start_momentum
+            to target momentum (default: 300)
+        start_momentum: Initial momentum value for warmup (default: 0.85)
         nesterov: Use Nesterov momentum (default: True)
         ns_steps: Newton-Schulz iteration steps (default: 5)
-        weight_decay: L2 weight decay (default: 0.0)
+        weight_decay: L2 weight decay (default: 0.01)
+        max_grad_norm: Max gradient norm for clipping (default: 1.0, None=no clip)
     """
 
     def __init__(
         self,
         params,
-        lr: float = 0.02,
+        lr: float = 0.005,
         momentum: float = 0.95,
+        momentum_warmup_steps: int = 300,
+        start_momentum: float = 0.85,
         nesterov: bool = True,
         ns_steps: int = 5,
-        weight_decay: float = 0.0,
+        weight_decay: float = 0.01,
+        max_grad_norm: float | None = 1.0,
     ):
-        defaults = dict(lr=lr, momentum=momentum, nesterov=nesterov,
-                        ns_steps=ns_steps, weight_decay=weight_decay)
+        defaults = dict(
+            lr=lr,
+            momentum=momentum,
+            momentum_warmup_steps=momentum_warmup_steps,
+            start_momentum=start_momentum,
+            nesterov=nesterov,
+            ns_steps=ns_steps,
+            weight_decay=weight_decay,
+            max_grad_norm=max_grad_norm,
+        )
         super().__init__(params, defaults)
+        self._step_count = 0
+
+    def _get_current_momentum(self, group: dict) -> float:
+        """Compute momentum with linear warmup."""
+        target = group["momentum"]
+        start = group["start_momentum"]
+        warmup = group["momentum_warmup_steps"]
+
+        if warmup <= 0 or self._step_count >= warmup:
+            return target
+
+        # Linear interpolation: start → target over warmup steps
+        progress = self._step_count / warmup
+        return start + (target - start) * progress
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -94,16 +129,25 @@ class Muon(Optimizer):
 
         for group in self.param_groups:
             lr = group["lr"]
-            momentum = group["momentum"]
             nesterov = group["nesterov"]
             ns_steps = group["ns_steps"]
             wd = group["weight_decay"]
+            max_grad_norm = group["max_grad_norm"]
+
+            # Get warmup-adjusted momentum
+            momentum = self._get_current_momentum(group)
 
             for p in group["params"]:
                 if p.grad is None:
                     continue
 
                 g = p.grad
+
+                # Gradient clipping
+                if max_grad_norm is not None:
+                    grad_norm = g.norm()
+                    if grad_norm > max_grad_norm:
+                        g = g * (max_grad_norm / (grad_norm + 1e-8))
 
                 # Weight decay (decoupled, like AdamW)
                 if wd > 0:
@@ -136,12 +180,33 @@ class Muon(Optimizer):
                 # Apply update
                 p.add_(update, alpha=-lr)
 
+        self._step_count += 1
         return loss
 
 
-def split_params_for_muon(model, lr_muon=0.02, lr_adamw=1e-4, wd=0.01):
+# Names to exclude from Muon — these should always use AdamW
+_ADAMW_ONLY_NAMES = (
+    "embed_tokens",
+    "lm_head",
+    "wte",          # GPT-style embedding name
+    "wpe",          # GPT-style positional embedding
+    "norm",         # LayerNorm / RMSNorm
+    "layernorm",
+    "ln_",
+)
+
+
+def split_params_for_muon(model, lr_muon=0.005, lr_adamw=1e-4, wd=0.01):
     """
     Split model parameters into Muon (2D matrices) and AdamW (everything else).
+
+    Rules:
+        - 2D weight matrices in attention/MLP layers → Muon
+        - Embeddings (embed_tokens, wte, wpe) → AdamW (even though 2D)
+        - LM head (lm_head) → AdamW (even though 2D)
+        - LayerNorm / RMSNorm → AdamW
+        - Biases (1D) → AdamW
+        - Anything frozen (requires_grad=False) → skipped
 
     Returns:
         muon_params: list of 2D weight tensors for Muon
@@ -154,11 +219,12 @@ def split_params_for_muon(model, lr_muon=0.02, lr_adamw=1e-4, wd=0.01):
         if not param.requires_grad:
             continue
 
-        # Muon: 2D weight matrices (linear layers)
-        if param.ndim == 2:
+        # Check if this is a name that should always go to AdamW
+        is_adamw_only = any(excl in name.lower() for excl in _ADAMW_ONLY_NAMES)
+
+        if param.ndim == 2 and not is_adamw_only:
             muon_params.append(param)
         else:
-            # AdamW: embeddings (3D in some cases), layernorm (1D), biases
             adamw_params.append(param)
 
     return muon_params, adamw_params

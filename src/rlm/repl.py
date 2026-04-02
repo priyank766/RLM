@@ -101,15 +101,24 @@ class LocalREPL:
             answers: list[str] = []
             for index, chunk in enumerate(selected):
                 prompt = prompt_template.format(chunk=chunk, query=query, index=index)
-                answers.append(llm_query_fn(prompt))
+                answers.append(_llm_query_wrapped(prompt))
             return answers
+
+        def _llm_query_wrapped(prompt: str) -> str:
+            """Wrapper that auto-prints the sub-LM response."""
+            # Append conciseness instruction so sub-LM returns just the answer
+            enhanced_prompt = prompt + "\n\nAnswer concisely — return ONLY the answer, no explanation."
+            result = llm_query_fn(enhanced_prompt)
+            # Auto-print so the model SEES the result in stdout
+            print(f"[Sub-LM answered] {result}")
+            return result
 
         self._namespace = {
             "__builtins__": __builtins__,
             "context": context,
             "query": query,
             "context_len": len(context),
-            "llm_query": llm_query_fn,
+            "llm_query": _llm_query_wrapped,
             "query_chunks": query_chunks,
             "FINAL": FINAL,
             "FINAL_VAR": FINAL_VAR,
@@ -123,8 +132,23 @@ class LocalREPL:
             "json": _json,
         }
 
+    # Names that must never be overwritten by model code
+    _PROTECTED_NAMES = {
+        "context", "query", "context_len",
+        "llm_query", "query_chunks",
+        "FINAL", "FINAL_VAR",
+        "head", "tail", "context_slice",
+        "chunk_text", "keyword_windows", "regex_windows",
+    }
+
     def execute(self, code: str) -> tuple[str, str]:
         """Execute one code cell in the persistent namespace."""
+        # Strip function redefinitions that shadow built-in helpers
+        code = self._strip_redefinitions(code)
+
+        # Snapshot protected values before exec
+        saved = {k: self._namespace[k] for k in self._PROTECTED_NAMES if k in self._namespace}
+
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
         old_stdout, old_stderr = sys.stdout, sys.stderr
@@ -145,7 +169,57 @@ class LocalREPL:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
 
-        return stdout_buf.getvalue(), stderr_buf.getvalue()
+        # Restore any overwritten built-ins
+        overwritten = []
+        for name, original in saved.items():
+            if self._namespace.get(name) is not original:
+                self._namespace[name] = original
+                overwritten.append(name)
+
+        stdout = stdout_buf.getvalue()
+        stderr = stderr_buf.getvalue()
+
+        if overwritten:
+            warning = (
+                f"[REPL WARNING] You redefined built-in function(s): {', '.join(overwritten)}. "
+                f"This was blocked. These functions are ALREADY available — just call them directly. "
+                f"Example: results = keyword_windows('search term')\n"
+            )
+            stderr = warning + stderr
+
+        return stdout, stderr
+
+    def _strip_redefinitions(self, code: str) -> str:
+        """Remove 'def func_name(...)' blocks that shadow REPL built-ins."""
+        lines = code.split("\n")
+        cleaned = []
+        skip_indent = None
+
+        for line in lines:
+            stripped = line.lstrip()
+
+            # Check if this line starts a function def that shadows a built-in
+            if stripped.startswith("def "):
+                func_name = stripped[4:].split("(")[0].strip()
+                if func_name in self._PROTECTED_NAMES:
+                    # Skip this function definition and its body
+                    skip_indent = len(line) - len(stripped)
+                    continue
+
+            # Skip indented body of a blocked def
+            if skip_indent is not None:
+                if stripped == "" or (len(line) - len(stripped)) > skip_indent:
+                    continue
+                else:
+                    skip_indent = None
+
+            # Also block direct re-assignment of context
+            if stripped.startswith("context =") or stripped.startswith("context="):
+                continue
+
+            cleaned.append(line)
+
+        return "\n".join(cleaned)
 
     def clear_final(self) -> None:
         """Undo a premature FINAL() call so the loop can continue."""
