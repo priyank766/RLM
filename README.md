@@ -193,6 +193,10 @@ uv run python scripts/eval_sft.py experiments/checkpoints/sft_muon/final
 
 # Step 5: Compare all results
 uv run python scripts/plot_results.py experiments/eval_sft_adamw.jsonl experiments/eval_sft_muon.jsonl --merge
+
+(optional)RLM Visualization Server — run RLM and watch every step in your browser.
+uv run python scripts/run_viz.py
+uv run python scripts/run_viz.py --port 8765
 ```
 
 ### Training Parameters (6GB VRAM)
