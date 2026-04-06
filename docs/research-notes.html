@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research Notes — RLM Project</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .notes-hero { text-align: center; padding: 64px 0 48px; border-bottom: 1px solid var(--border-light); margin-bottom: 48px; }
+    .notes-hero h1 { font-family: var(--font-serif); font-size: 2.4rem; font-weight: 700; margin-bottom: 12px; }
+    .notes-hero p { color: var(--text-secondary); max-width: 560px; margin: 0 auto; }
+    .notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+    .note-card { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 28px; box-shadow: var(--shadow-sm); transition: transform 0.2s ease, box-shadow 0.2s ease; text-align: left; }
+    .note-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .note-card h3 { font-family: var(--font-serif); font-size: 1.3rem; margin-bottom: 10px; text-align: left; }
+    .note-card p { color: var(--text-secondary); font-size: 0.92rem; line-height: 1.6; text-align: left; }
+    .note-card .note-meta { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; text-align: left; }
+    .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); text-decoration: none; font-size: 0.92rem; margin-bottom: 32px; }
+    .back-link:hover { text-decoration: underline; }
+    #content { margin-left: 0 !important; }
+    footer { margin-left: 0 !important; }
+    article { max-width: var(--content-wide) !important; margin: 0 auto; padding: 48px 48px 96px; }
+  </style>
+</head>
+<body>
+  <div id="progress-bar"></div>
+  <header id="header">
+    <button id="sidebar-toggle" aria-label="Toggle sidebar">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><rect y="3" width="20" height="2" rx="1"/><rect y="9" width="20" height="2" rx="1"/><rect y="15" width="20" height="2" rx="1"/></svg>
+    </button>
+    <a href="index.html" class="header-title">
+      <svg class="header-logo" width="24" height="24" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="var(--accent)" stroke-width="5"/><circle cx="50" cy="50" r="22" fill="none" stroke="var(--accent)" stroke-width="3.5"/><circle cx="50" cy="50" r="6" fill="var(--accent)"/></svg>
+      <span>RLM Research</span>
+    </a>
+    <div class="header-actions">
+      <a href="https://github.com/priyank766/RLM" target="_blank" rel="noopener" class="header-link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+      <a href="https://arxiv.org/abs/2512.24601" target="_blank" rel="noopener" class="header-link">
+        Paper
+      </a>
+      <button id="theme-toggle" aria-label="Toggle theme">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="content">
+    <article>
+      <div class="notes-hero">
+        <h1>Research Notes</h1>
+        <p>Deep dives into the RLM paper, external research, training pipeline audits, and novel extensions.</p>
+      </div>
+
+      <a href="index.html" class="back-link">← Back to main page</a>
+
+      <div class="notes-grid">
+
+        <div class="note-card">
+          <div class="note-meta">Paper Breakdown</div>
+          <h3>RLM Deep Dive</h3>
+          <p>Complete breakdown of the arXiv:2512.24601 paper — architecture, algorithm, results, and what existing implementations look like. Covers the three design points that make RLMs different from naive agentic approaches.</p>
+        </div>
+
+        <div class="note-card">
+          <div class="note-meta">External Audit</div>
+          <h3>Research Findings</h3>
+          <p>Independent review of the project direction against external literature. What the project gets right, what needs improvement, and recommendations for the RL phase. Includes analysis of benchmark fairness and security posture.</p>
+        </div>
+
+        <div class="note-card">
+          <div class="note-meta">Future Directions</div>
+          <h3>Novel Research Ideas</h3>
+          <p>Five potential contributions: Muon optimizer for RLM post-training, async parallel sub-calls, adaptive recursion depth, REPL code quality training, and structured output from RLM REPL. Feasibility matrix and priority ranking included.</p>
+        </div>
+
+        <div class="note-card">
+          <div class="note-meta">Technical Audit</div>
+          <h3>Training Pipeline Audit</h3>
+          <p>Detailed audit of the SFT training pipeline — Muon optimizer fixes needed, CombinedOptimizer compatibility risks, dataset size concerns (16 examples is too few), hyperparameter recommendations, and the complete training roadmap.</p>
+        </div>
+
+      </div>
+
+      <div style="margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--border-light); text-align: center;">
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Full research documents are also available in the <code style="font-size: 0.85em; background: var(--bg-code); padding: 2px 6px; border-radius: 3px;">docs/</code> directory of the <a href="https://github.com/priyank766/RLM" target="_blank" rel="noopener">GitHub repository</a>.</p>
+      </div>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Built on a laptop. All results reproducible with the same setup.</p>
+    <p>Based on <a href="https://arxiv.org/abs/2512.24601" target="_blank" rel="noopener">Recursive Language Models</a> by Zhang, Kraska & Khattab.</p>
+    <p class="footer-links">
+      <a href="https://github.com/priyank766/RLM" target="_blank" rel="noopener">GitHub</a>
+      <span>·</span>
+      <a href="https://arxiv.org/abs/2512.24601" target="_blank" rel="noopener">Paper</a>
+      <span>·</span>
+      <a href="index.html">Main Page</a>
+    </p>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

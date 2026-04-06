@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RLM — Recursive Language Models | Research by Priyank</title>
+  <meta name="description" content="A local, reproducible comparison framework putting Recursive Language Models head-to-head against standard LLM inference on long-context tasks." />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- Reading progress bar -->
+  <div id="progress-bar"></div>
+
+  <!-- Header -->
+  <header id="header">
+    <button id="sidebar-toggle" aria-label="Toggle sidebar">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><rect y="3" width="20" height="2" rx="1"/><rect y="9" width="20" height="2" rx="1"/><rect y="15" width="20" height="2" rx="1"/></svg>
+    </button>
+    <a href="#top" class="header-title">
+      <svg class="header-logo" width="24" height="24" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="var(--accent)" stroke-width="5"/><circle cx="50" cy="50" r="22" fill="none" stroke="var(--accent)" stroke-width="3.5"/><circle cx="50" cy="50" r="6" fill="var(--accent)"/></svg>
+      <span>RLM Research</span>
+    </a>
+    <div class="header-actions">
+      <a href="https://github.com/priyank766/RLM" target="_blank" rel="noopener" class="header-link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+      <a href="https://arxiv.org/abs/2512.24601" target="_blank" rel="noopener" class="header-link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.31 3.39 13.08 1.2a1.53 1.53 0 0 0-.6 0L8.52 2.4 3.69.9a.76.76 0 0 0-.93.48L.78 6.9l-.06.24L.06 7.5a1.56 1.56 0 0 0 .42 1.44l5.1 5.1-1.26 3.78a.75.75 0 0 0 .93.93l3.78-1.26 5.1 5.1a1.56 1.56 0 0 0 1.44.42l.36-.06.24-.06 5.52-1.98a.76.76 0 0 0 .48-.93l-1.5-4.83 1.2-4.56a1.53 1.53 0 0 0 0-.6ZM9.3 5.1l-.3 1.2 3.24 3.24-4.44 4.44.9.36L13.44 9.6l3.66 3.66-.36.78L21 12.78l-1.8-5.82-4.32 1.26-1.8-1.8L9.3 5.1Z"/></svg>
+        Paper
+      </a>
+      <button id="theme-toggle" aria-label="Toggle theme">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <nav>
+      <div class="sidebar-section">
+        <h3>Overview</h3>
+        <a href="#abstract">Abstract</a>
+        <a href="#introduction">Introduction</a>
+        <a href="#the-problem">The Problem: Context Rot</a>
+        <a href="#the-solution">The RLM Solution</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="#experiment">My Experiment</a>
+        <a href="#results">Results</a>
+      </div>
+      <div class="sidebar-section">
+        <h3>Technical</h3>
+        <a href="#architecture">Architecture</a>
+        <a href="#repl">The REPL Engine</a>
+        <a href="#recursion">Recursive Sub-Calls</a>
+        <a href="#training">Training Pipeline</a>
+      </div>
+      <div class="sidebar-section">
+        <h3>Project</h3>
+        <a href="#stack">Tech Stack</a>
+        <a href="#setup">Setup & Run</a>
+        <a href="#structure">Project Structure</a>
+        <a href="#roadmap">Roadmap</a>
+      </div>
+      <div class="sidebar-section">
+        <h3>Deep Dives</h3>
+        <a href="research-notes.html">Research Notes →</a>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- Overlay for mobile sidebar -->
+  <div id="sidebar-overlay"></div>
+
+  <!-- Main content -->
+  <main id="content">
+    <article>
+
+      <!-- Title section -->
+      <section id="top" class="title-section">
+        <div class="title-meta">Research Project · 2026</div>
+        <h1>Recursive Language Models</h1>
+        <p class="subtitle">A local, reproducible comparison of RLM vs vanilla LLM inference on long-context tasks — using the same model for both paths.</p>
+        <div class="authors">
+          <span class="author">Priyank Patel</span>
+        </div>
+        <div class="title-links">
+          <a href="https://github.com/priyank766/RLM" target="_blank" rel="noopener" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            View Code
+          </a>
+          <a href="https://arxiv.org/abs/2512.24601" target="_blank" rel="noopener" class="btn btn-secondary">
+            Read the Paper
+          </a>
+        </div>
+      </section>
+
+      <!-- Abstract -->
+      <section id="abstract" class="abstract-section">
+        <h2>Abstract</h2>
+        <p>Standard LLMs suffer from <strong>context rot</strong> — a fundamental degradation in reasoning quality as input context grows, caused by attention dilution and the lost-in-the-middle effect. <strong>Recursive Language Models (RLMs)</strong>, introduced by Zhang, Kraska, and Khattab (2025), take a different approach: instead of passing long documents into the model's context window, they store the document as a variable in an external Python REPL. The model then writes code to search, chunk, and query focused snippets — recursively calling itself on sub-problems. The full context never enters the token window.</p>
+        <p>This project implements an RLM system from scratch and runs a head-to-head comparison against vanilla inference using the <strong>same model</strong> (<code>qwen3.5:2b</code>) on both paths. All experiments run locally on a laptop GPU (RTX 4050, 6GB VRAM) via Ollama — no cloud, no API. The RLM answers questions about a 52,719-character document (beyond the vanilla model's visible context) in just 3 sub-calls, demonstrating that the approach works on commodity hardware with a 2B model.</p>
+      </section>
+
+      <!-- Introduction -->
+      <section id="introduction">
+        <h2>1. Introduction</h2>
+        <p>The context window arms race is one of the most visible trends in LLM development. Every few months, a new model announces a bigger window: 128K tokens, 256K, a million, ten million. It reads like Moore's Law for attention.</p>
+        <p>But there's a problem: <strong>bigger context windows don't actually solve the underlying issue.</strong> The phenomenon is called <strong>context rot</strong> — the measurable degradation in output quality as input context grows. It happens well before the model hits its maximum window. It happens on every model tested, from GPT-4.1 to Claude Opus 4 to Gemini 2.5 Pro.</p>
+        <p>The RLM paper offers a genuinely different approach. Instead of giving the model more context to read, it changes <em>how</em> the model interacts with context entirely. This project explores that idea by building the system from scratch.</p>
+      </section>
+
+      <!-- The Problem -->
+      <section id="the-problem">
+        <h2>2. The Problem: Context Rot</h2>
+        <p>Context rot manifests in three well-understood mechanisms:</p>
+
+        <h3>2.1 Attention Dilution</h3>
+        <p>Transformer self-attention distributes a fixed budget across all tokens via softmax normalization. As context grows, the per-token attention weight shrinks — roughly proportional to 1/N. The relevant signal doesn't get louder; the noise floor rises. At 10,000 tokens, a model tracks ~100M pairwise relationships. At 100,000, that's 10 billion.</p>
+
+        <h3>2.2 Lost-in-the-Middle Effect</h3>
+        <p>Model attention follows a U-shaped curve across input positions. Information at the start (primacy) and end (recency) gets strong attention. Information in the middle drops by 30%+ in recall. This is baked into the architecture — not a training flaw.</p>
+
+        <h3>2.3 Distractor Interference</h3>
+        <p>Semantically similar but irrelevant tokens actively mislead the model. Coherent text makes this worse because plausible distractors look like the real thing. Code is especially vulnerable due to consistent naming conventions and repeated patterns.</p>
+
+        <div class="callout callout-warn">
+          <strong>Key insight:</strong> Standard fixes fail because they don't address the root cause. Bigger windows scale the problem. RAG can't capture multi-hop relationships. Summarization throws away the details you'll need later.
+        </div>
+      </section>
+
+      <!-- The Solution -->
+      <section id="the-solution">
+        <h2>3. The RLM Solution</h2>
+        <p>The Recursive Language Model architecture treats the long prompt as <strong>external state</strong> rather than text the model reads. Here's the core idea:</p>
+
+        <div class="diagram">
+          <div class="diagram-box">
+            <strong>Vanilla LLM</strong>
+            <p>[system + FULL 52,719-char document + query] → LLM → answer</p>
+            <p class="diagram-note">Attention dilution degrades quality. KV cache truncation at 16K chars.</p>
+          </div>
+          <div class="diagram-arrow">vs</div>
+          <div class="diagram-box diagram-box-highlight">
+            <strong>RLM</strong>
+            <p>[system + metadata: "52,719 chars"] → root LLM → writes Python code</p>
+            <p class="diagram-indent">↓</p>
+            <p>REPL executes code. Full document in <code>context</code> variable in RAM.</p>
+            <p class="diagram-indent">↓</p>
+            <p><code>keyword_windows("Holmes")</code> → 3 sub-calls via <code>llm_query()</code></p>
+            <p class="diagram-indent">↓</p>
+            <p>Root LLM consolidates → <code>FINAL(answer)</code></p>
+          </div>
+        </div>
+
+        <p>Three key properties make this work:</p>
+        <ol>
+          <li><strong>No passive context bloat</strong> — the model's working context stays small and focused</li>
+          <li><strong>Active exploration</strong> — the model writes code to find interesting sections, not just read passively</li>
+          <li><strong>Zero information loss</strong> — the full document sits in memory; nothing is summarized away</li>
+        </ol>
+      </section>
+
+      <!-- How It Works -->
+      <section id="how-it-works">
+        <h2>4. How It Works</h2>
+
+        <h3>4.1 The REPL Environment</h3>
+        <p>A persistent Python environment initialized with the full document as a string variable:</p>
+        <pre><code>namespace = {
+    "context": &lt;full 52,719-char document&gt;,
+    "query": "What was Holmes trying to figure out?",
+    "context_len": 52719,
+    # Helper functions:
+    "head(n)", "tail(n)", "context_slice(start, end)",
+    "chunk_text(size, overlap)", "keyword_windows(keyword, ...)",
+    "regex_windows(pattern, ...)", "query_chunks(chunks, template)",
+    # Recursive call:
+    "llm_query(prompt)",
+    # Termination:
+    "FINAL(answer)", "FINAL_VAR(variable)",
+}</code></pre>
+
+        <h3>4.2 The Root LLM Prompt</h3>
+        <p>The model sees only metadata — never the full document:</p>
+        <pre><code>System: You are an RLM. Write Python code to examine the context
+variable and answer queries. Use helper functions like
+keyword_windows(), llm_query(), and chunk_text().
+
+User:
+Context info:
+  Total length : 52,719 characters
+  Preview      : It is of the first importance to not allow yourself...
+
+Query: What was Holmes trying to figure out?</code></pre>
+
+        <h3>4.3 The Loop</h3>
+        <p>Each iteration: (1) root LLM generates code → (2) REPL executes it → (3) truncated output goes back to root LLM → (4) repeat until <code>FINAL()</code> or timeout (max 20 iterations).</p>
+
+        <h3>4.4 Recursive Sub-Calls</h3>
+        <p>When the root LLM calls <code>llm_query()</code>, a <strong>fresh invocation of the same model</strong> answers a focused question on a tiny snippet (~400–800 chars). No dilution. No distractors. Just a clean reading comprehension task.</p>
+
+        <h3>4.5 Recursive-First Policy</h3>
+        <p>For long contexts (≥16K chars), I enforce:</p>
+        <ul>
+          <li>First-iteration <code>FINAL()</code> is always rejected — the model must explore first</li>
+          <li><code>FINAL()</code> without sub-calls is rejected — evidence gathering required</li>
+          <li>Repeated code strategies are flagged and pushed toward variation</li>
+        </ul>
+      </section>
+
+      <!-- Experiment -->
+      <section id="experiment">
+        <h2>5. My Experiment</h2>
+
+        <h3>5.1 Setup</h3>
+        <table class="results-table">
+          <tr><th>Component</th><th>Value</th></tr>
+          <tr><td>GPU</td><td>NVIDIA RTX 4050 (6GB VRAM)</td></tr>
+          <tr><td>Model</td><td><code>qwen3.5:2b</code> via Ollama</td></tr>
+          <tr><td>Document</td><td>"A Scandal in Bohemia" — 52,719 chars, 9,199 words</td></tr>
+          <tr><td>Question</td><td>"What was Holmes trying to figure out?"</td></tr>
+          <tr><td>Vanilla context cap</td><td>~4,096 tokens (~16K chars) due to KV cache limit</td></tr>
+        </table>
+
+        <h3>5.2 The Trajectory</h3>
+        <p>The model answered in <strong>4 REPL iterations</strong> with <strong>3 sub-calls</strong>:</p>
+
+        <div class="trajectory">
+          <div class="trajectory-step">
+            <span class="trajectory-label">Iteration 1</span>
+            <p><strong>Exploration:</strong> The model inspected the document preview and searched for character mentions:</p>
+            <pre><code>holmes_windows = keyword_windows("Holmes", window=400, limit=5)
+for i, w in enumerate(holmes_windows):
+    print(f"--- Holmes mention {i+1} ---")
+    print(w[:300])</code></pre>
+          </div>
+          <div class="trajectory-step">
+            <span class="trajectory-label">Iteration 2</span>
+            <p><strong>Focused reading:</strong> Asked a sub-LM about the first relevant snippet:</p>
+            <pre><code>result1 = llm_query("""
+Based on this text: "...Mr. Sherlock Holmes, who is usually late..."
+Question: What problem is Holmes working on?
+Answer concisely.""")</code></pre>
+            <p>Sub-LM answer: <em>"Holmes is trying to recover a compromising photograph from Irene Adler."</em></p>
+          </div>
+          <div class="trajectory-step">
+            <span class="trajectory-label">Iteration 3</span>
+            <p><strong>Verification:</strong> Two more sub-calls on different snippets confirmed the same answer.</p>
+          </div>
+          <div class="trajectory-step trajectory-step-final">
+            <span class="trajectory-label">Iteration 4 ✓</span>
+            <p><strong>Termination:</strong></p>
+            <pre><code>FINAL("Holmes was trying to recover a compromising photograph
+of Irene Adler with the King of Bohemia, which the King feared
+she would use to ruin his upcoming marriage.")</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Results -->
+      <section id="results">
+        <h2>6. Results</h2>
+        <table class="results-table">
+          <tr><th>Metric</th><th>Vanilla LLM</th><th>RLM</th></tr>
+          <tr><td>Context seen</td><td>Truncated to ~16K chars</td><td>Full 52,719 chars</td></tr>
+          <tr><td>Sub-calls</td><td>N/A (single pass)</td><td><strong>3</strong></td></tr>
+          <tr><td>REPL iterations</td><td>N/A</td><td>4</td></tr>
+          <tr><td>REPL errors</td><td>N/A</td><td>0</td></tr>
+          <tr><td>Answer correct</td><td>Yes (answer in first third)</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Latency</td><td>~15s</td><td>~55s</td></tr>
+        </table>
+
+        <div class="callout callout-info">
+          <strong>Key takeaway:</strong> Three sub-calls was sufficient because the model wrote good search code. <code>keyword_windows()</code> found relevant sections. <code>llm_query()</code> asked focused questions. That was enough.
+        </div>
+
+        <h3>Where Vanilla Would Fail</h3>
+        <p>On this question, vanilla gets lucky — the answer is in the first third. But change the question to <em>"How did Holmes ultimately outsmart Irene Adler?"</em> — the answer is in the final chapters, beyond the 16K truncation point. Vanilla would be blind. RLM would find it.</p>
+      </section>
+
+      <!-- Architecture -->
+      <section id="architecture">
+        <h2>7. Architecture</h2>
+        <pre><code>RLM/
+├── src/
+│   ├── rlm/
+│   │   ├── clients/ollama.py     # Ollama HTTP client
+│   │   ├── repl.py               # LocalREPL — exec-based REPL
+│   │   └── rlm_repl.py           # Full recursive loop + recursive-first policy
+│   ├── baseline/vanilla_llm.py   # Direct context inference
+│   ├── benchmarks/
+│   │   ├── niah.py               # Needle in a Haystack generator
+│   │   └── long_doc_qa.py        # Long Document QA generator
+│   ├── comparison/
+│   │   ├── runner.py             # Runs both methods, saves JSONL
+│   │   └── eval.py               # Scoring (exact match, contains, numeric)
+│   └── training/muon.py          # Muon optimizer (Newton-Schulz)
+├── scripts/
+│   ├── smoke_test.py             # Quick verification
+│   ├── run_niah.py               # NIAH benchmark
+│   ├── run_comparison.py         # Full comparison suite
+│   ├── plot_results.py           # Research-style plots
+│   ├── build_sft_dataset.py      # Trajectory → SFT data
+│   ├── train_sft.py              # QLoRA SFT (AdamW or Muon)
+│   └── eval_sft.py               # Evaluate SFT model
+└── prompts/rlm_system.txt        # System prompt for root LLM</code></pre>
+      </section>
+
+      <!-- REPL -->
+      <section id="repl">
+        <h2>8. The REPL Engine</h2>
+        <p>The REPL is built on Python's <code>exec()</code> with several safety features:</p>
+        <ul>
+          <li><strong>Persistent namespace</strong> — variables carry across iterations</li>
+          <li><strong>Protected names</strong> — helper functions cannot be redefined by the model</li>
+          <li><strong>Auto-restore</strong> — overwritten built-ins are restored after each execution</li>
+          <li><strong>Code stripping</strong> — function definitions shadowing helpers are removed before exec</li>
+          <li><strong>Error capture</strong> — both stdout and stderr are captured and returned</li>
+          <li><strong>Final detection</strong> — <code>FINAL()</code> sets a flag checked after each execution</li>
+        </ul>
+      </section>
+
+      <!-- Recursion -->
+      <section id="recursion">
+        <h2>9. Recursive Sub-Calls</h2>
+        <p>Each <code>llm_query()</code> call is a separate invocation of the same model with a focused prompt. The sub-LM has:</p>
+        <ul>
+          <li>No memory of previous iterations</li>
+          <li>A clean, short context (~400–800 chars)</li>
+          <li>A direct, specific question</li>
+          <li>Instructions to answer concisely</li>
+        </ul>
+        <p>This is the RLM advantage: instead of reading 50,000 words and hoping attention lands on the right parts, the model searches for interesting sections and reads only those. Three sub-calls for a 9,200-word document.</p>
+      </section>
+
+      <!-- Training -->
+      <section id="training">
+        <h2>10. Training Pipeline</h2>
+        <p>Each correct RLM trajectory is a training example. The pipeline:</p>
+        <ol>
+          <li><strong>Collect trajectories</strong> — run benchmarks with <code>--save-trajectories</code></li>
+          <li><strong>Filter</strong> — keep only correct answers with <code>FINAL()</code> and no REPL errors</li>
+          <li><strong>Format</strong> — convert to chat-style SFT data with <code>build_sft_dataset.py</code></li>
+          <li><strong>Train</strong> — QLoRA SFT with AdamW or Muon via <code>train_sft.py</code></li>
+          <li><strong>Evaluate</strong> — run the trained model through NIAH with <code>eval_sft.py</code></li>
+        </ol>
+        <p>The Muon optimizer ablation compares AdamW vs Muon (Newton-Schulz orthogonalization for 2D weight matrices) for RLM trajectory fine-tuning.</p>
+      </section>
+
+      <!-- Stack -->
+      <section id="stack">
+        <h2>11. Tech Stack</h2>
+        <table class="results-table">
+          <tr><th>Component</th><th>Choice</th></tr>
+          <tr><td>Language</td><td>Python 3.12</td></tr>
+          <tr><td>Package manager</td><td>uv</td></tr>
+          <tr><td>Model</td><td><code>qwen3.5:2b</code> via Ollama</td></tr>
+          <tr><td>REPL</td><td>Local <code>exec()</code>-based Python</td></tr>
+          <tr><td>GPU</td><td>RTX 4050 Laptop (6GB VRAM)</td></tr>
+          <tr><td>Training</td><td>QLoRA (4-bit NF4) + LoRA rank 16</td></tr>
+          <tr><td>Optimizer</td><td>AdamW or Muon (ablation)</td></tr>
+        </table>
+      </section>
+
+      <!-- Setup -->
+      <section id="setup">
+        <h2>12. Setup & Run</h2>
+        <pre><code># 1. Clone
+git clone https://github.com/priyank766/RLM.git
+cd RLM
+
+# 2. Install
+uv sync
+
+# 3. Start Ollama
+ollama serve
+ollama pull qwen3.5:2b
+
+# 4. Smoke test
+uv run python scripts/smoke_test.py
+
+# 5. Full benchmark
+uv run python scripts/run_niah.py --small</code></pre>
+      </section>
+
+      <!-- Structure -->
+      <section id="structure">
+        <h2>13. Project Structure</h2>
+        <p>The full project tree is shown in Section 7 above. Key entry points:</p>
+        <ul>
+          <li><code>scripts/smoke_test.py</code> — verify everything works in ~2 minutes</li>
+          <li><code>scripts/run_niah.py</code> — Needle in a Haystack benchmark suite</li>
+          <li><code>scripts/run_comparison.py</code> — full NIAH + LongDocQA comparison</li>
+          <li><code>scripts/plot_results.py</code> — generate research-style plots</li>
+          <li><code>scripts/view_results.py</code> — analyze saved JSONL results</li>
+        </ul>
+      </section>
+
+      <!-- Roadmap -->
+      <section id="roadmap">
+        <h2>14. Roadmap</h2>
+        <table class="results-table">
+          <tr><th>Phase</th><th>Status</th></tr>
+          <tr><td>Phase 0 — Research & Planning</td><td>✅ Done</td></tr>
+          <tr><td>Phase 1 — Core Infrastructure</td><td>✅ Done</td></tr>
+          <tr><td>Phase 2 — Benchmarks + Runner</td><td>✅ Done</td></tr>
+          <tr><td>Phase 2.5 — Resumable Runs, Trajectories, Plots</td><td>✅ Done</td></tr>
+          <tr><td>Phase 3 — Analysis</td><td>🔄 In Progress</td></tr>
+          <tr><td>Phase 4a — SFT Training with QLoRA</td><td>🔧 Pipeline Built</td></tr>
+          <tr><td>Phase 4b — GRPO Reinforcement Learning</td><td>🔧 Pipeline Built</td></tr>
+          <tr><td>Phase 4c — Muon Optimizer Ablation</td><td>🔧 Pipeline Built</td></tr>
+          <tr><td>Phase 5 — Publication (Medium + HF + Pages)</td><td>📝 Planned</td></tr>
+        </table>
+      </section>
+
+    </article>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <p>Built on a laptop. All results reproducible with the same setup.</p>
+    <p>Based on <a href="https://arxiv.org/abs/2512.24601" target="_blank" rel="noopener">Recursive Language Models</a> by Zhang, Kraska & Khattab.</p>
+    <p class="footer-links">
+      <a href="https://github.com/priyank766/RLM" target="_blank" rel="noopener">GitHub</a>
+      <span>·</span>
+      <a href="https://arxiv.org/abs/2512.24601" target="_blank" rel="noopener">Paper</a>
+      <span>·</span>
+      <a href="research-notes.html">Research Notes</a>
+    </p>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
