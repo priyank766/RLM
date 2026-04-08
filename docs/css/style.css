@@ -630,6 +630,17 @@ pre code {
   padding-left: 20px;
 }
 
+.architecture-diagram-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--radius-sm);
+}
+
+.image-credit-note {
+  margin-top: 10px;
+}
+
 .diagram-arrow {
   text-align: center;
   color: var(--text-muted);
