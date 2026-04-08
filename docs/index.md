@@ -28,6 +28,14 @@ I wanted to understand this properly. And the best way to understand something i
 
 ---
 
+## RLM Architecture (Visual)
+
+![RLM architecture diagram](https://github.com/user-attachments/assets/3806f21c-378c-4702-af57-839423c22d11)
+
+<sub>Image credit: <a href="https://alexzhang13.github.io/blog/2025/rlm/">alexzhang13.github.io/blog/2025/rlm/</a></sub>
+
+---
+
 ## What This Project Does
 
 ```
