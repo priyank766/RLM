@@ -2,6 +2,8 @@
 
 A local, reproducible comparison framework that puts **Recursive Language Models (RLMs)** head-to-head against standard LLM inference on long-context tasks — using the exact same model for both. Includes **SFT training with QLoRA** and **Muon optimizer ablation**.
 
+🔗 **Project Blog:** https://priyank766.github.io/RLM/
+
 > Based on the research paper: [Recursive Language Models (arXiv:2512.24601)](https://arxiv.org/abs/2512.24601) by Zhang, Kraska & Khattab (2025/2026)
 
 ---
