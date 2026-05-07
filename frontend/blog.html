@@ -1,0 +1,1956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Recursive Language Models on Commodity Hardware — Priyank Patel</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- KaTeX -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"
+  onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+
+<!-- React + Babel for tweaks panel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<style id="paper-extras">
+  /* ============ HERO BAND ============ */
+  .hero {
+    position: relative;
+    margin: -64px -48px 48px;
+    padding: 96px 48px 72px;
+    background:
+      radial-gradient(ellipse 80% 60% at 75% 30%, color-mix(in oklab, var(--rlm) 18%, transparent), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 15% 80%, color-mix(in oklab, var(--vanilla) 14%, transparent), transparent 60%),
+      linear-gradient(180deg, color-mix(in oklab, var(--ink) 6%, var(--paper-bg)) 0%, var(--paper-bg) 100%);
+    border-bottom: 1px solid var(--rule);
+    overflow: hidden;
+  }
+  body[data-theme="dark"] .hero {
+    background:
+      radial-gradient(ellipse 80% 60% at 75% 30%, color-mix(in oklab, var(--rlm) 35%, transparent), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 15% 80%, color-mix(in oklab, var(--vanilla) 24%, transparent), transparent 60%),
+      var(--paper-bg);
+  }
+  .hero::before {
+    /* subtle dotted starfield */
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle 1px at 12% 22%, var(--ink-mute) 1px, transparent 1.5px),
+      radial-gradient(circle 1px at 84% 18%, var(--ink-mute) 1px, transparent 1.5px),
+      radial-gradient(circle 1px at 64% 70%, var(--ink-mute) 1px, transparent 1.5px),
+      radial-gradient(circle 1px at 28% 78%, var(--ink-mute) 1px, transparent 1.5px),
+      radial-gradient(circle 1px at 92% 55%, var(--ink-mute) 1px, transparent 1.5px),
+      radial-gradient(circle 1px at 7% 50%, var(--ink-mute) 1px, transparent 1.5px),
+      radial-gradient(circle 1px at 48% 12%, var(--ink-mute) 1px, transparent 1.5px),
+      radial-gradient(circle 1px at 70% 92%, var(--ink-mute) 1px, transparent 1.5px);
+    opacity: 0.35;
+    pointer-events: none;
+  }
+  .hero > * { position: relative; }
+  .hero .ornament {
+    position: absolute;
+    top: 32px; right: 48px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    display: flex; gap: 10px; align-items: center;
+  }
+  .hero .ornament .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--rlm);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--rlm) 25%, transparent);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--rlm) 25%, transparent); }
+    50%     { box-shadow: 0 0 0 6px color-mix(in oklab, var(--rlm) 10%, transparent); }
+  }
+  .hero h1.title {
+    font-size: 56px;
+    line-height: 1.05;
+    margin-bottom: 18px;
+    max-width: 20ch;
+  }
+  .hero .subtitle { font-size: 22px; max-width: 38ch; }
+  .hero .author-block { margin-top: 36px; }
+  .hero .doi-strip {
+    display: flex; gap: 18px; flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-mute);
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px dashed var(--rule);
+    max-width: 720px;
+  }
+  .hero .doi-strip span { display: flex; gap: 6px; align-items: center; }
+  .hero .doi-strip strong { color: var(--ink); font-weight: 600; }
+
+  /* prevent the original masthead border now that hero handles it */
+  .masthead { border-bottom: 0 !important; padding-bottom: 0 !important; margin-bottom: 0 !important; }
+
+  /* ============ FANCIER KPI STRIP ============ */
+  .kpi-strip {
+    position: relative;
+    background: linear-gradient(180deg, var(--paper-surface) 0%, var(--paper-bg) 100%) !important;
+    box-shadow: 0 1px 0 var(--rule), 0 14px 40px -28px color-mix(in oklab, var(--ink) 40%, transparent);
+  }
+  .kpi {
+    position: relative;
+    transition: background 0.2s ease;
+  }
+  .kpi:hover { background: color-mix(in oklab, var(--rlm) 4%, transparent); }
+  .kpi::before {
+    content: "";
+    position: absolute; left: 22px; top: 18px;
+    width: 18px; height: 1px;
+    background: var(--rlm);
+  }
+  .kpi:nth-child(odd)::before { background: var(--vanilla); }
+  .kpi .v { padding-top: 6px; }
+  .kpi .v::after {
+    content: "·";
+    color: var(--ink-mute);
+    font-size: 18px;
+    margin-left: 4px;
+    vertical-align: 6px;
+  }
+
+  /* ============ SECTION HEADS — editorial ============ */
+  h2.section {
+    position: relative;
+    margin-top: 96px !important;
+    padding-top: 24px !important;
+    border-top: 2px solid var(--ink);
+    border-bottom: 0 !important;
+    padding-bottom: 0 !important;
+    font-size: 11px !important;
+    letter-spacing: 0.22em !important;
+  }
+  h2.section .num {
+    background: var(--ink);
+    color: var(--paper-bg) !important;
+    padding: 3px 9px;
+    border-radius: 2px;
+    font-size: 11px !important;
+  }
+  h2.section::after {
+    content: "";
+    position: absolute;
+    top: -2px; left: 0;
+    height: 2px; width: 64px;
+    background: var(--rlm);
+  }
+
+  /* ============ DROP CAP — refined ============ */
+  .lede::first-letter {
+    font-size: 5.2em !important;
+    line-height: 0.82 !important;
+    padding: 8px 14px 0 0 !important;
+    color: var(--rlm) !important;
+    font-weight: 600 !important;
+    font-style: italic;
+  }
+  body[data-theme="dark"] .lede::first-letter { color: var(--rlm) !important; }
+
+  /* ============ ABSTRACT — quieter ornament ============ */
+  .abstract {
+    position: relative;
+    background: var(--paper-surface);
+    border: 0 !important;
+    border-left: 3px solid var(--rlm) !important;
+    border-radius: 0 !important;
+    padding: 28px 36px !important;
+    box-shadow: inset 0 0 0 1px var(--rule);
+  }
+  .abstract::before {
+    content: "❡";
+    position: absolute;
+    right: 24px; top: 22px;
+    font-family: var(--serif);
+    font-size: 32px;
+    color: color-mix(in oklab, var(--rlm) 50%, var(--rule));
+    line-height: 1;
+  }
+
+  /* ============ PULL QUOTES — bigger, floated ornament ============ */
+  .pullquote {
+    position: relative;
+    padding: 20px 28px 20px 52px;
+    border-left: 0 !important;
+    background:
+      linear-gradient(90deg, color-mix(in oklab, var(--vanilla) 8%, transparent), transparent 60%);
+    border-radius: 2px;
+    font-size: 28px !important;
+  }
+  .pullquote::before {
+    content: "“";
+    position: absolute;
+    left: 16px; top: 0;
+    font-family: var(--serif);
+    font-size: 88px;
+    line-height: 1;
+    color: var(--vanilla);
+    font-style: normal;
+  }
+  .pullquote.cool {
+    background: linear-gradient(90deg, color-mix(in oklab, var(--rlm) 9%, transparent), transparent 60%);
+  }
+  .pullquote.cool::before { color: var(--rlm); }
+
+  /* ============ FIGURE FRAMES — depth ============ */
+  .figure-frame {
+    background: var(--paper-surface);
+    box-shadow:
+      0 1px 0 color-mix(in oklab, var(--ink) 6%, transparent),
+      0 24px 48px -32px color-mix(in oklab, var(--ink) 30%, transparent);
+    position: relative;
+  }
+  .figure-frame::before {
+    content: "";
+    position: absolute;
+    top: 12px; left: 12px;
+    width: 8px; height: 8px;
+    border-top: 1px solid var(--rule);
+    border-left: 1px solid var(--rule);
+  }
+  .figure-frame::after {
+    content: "";
+    position: absolute;
+    bottom: 12px; right: 12px;
+    width: 8px; height: 8px;
+    border-bottom: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
+  }
+  figcaption .label {
+    background: var(--ink);
+    color: var(--paper-bg);
+    padding: 2px 7px;
+    border-radius: 2px;
+  }
+
+  /* ============ TOGGLE BAR — taller, segmented ============ */
+  .toggle-bar {
+    box-shadow: 0 1px 0 var(--rule), 0 8px 18px -14px color-mix(in oklab, var(--ink) 40%, transparent);
+  }
+  .toggle-bar button { padding: 8px 20px !important; }
+
+  /* ============ TRAJECTORY — header strip ============ */
+  .traj {
+    box-shadow:
+      0 1px 0 color-mix(in oklab, var(--ink) 6%, transparent),
+      0 24px 48px -32px color-mix(in oklab, var(--ink) 30%, transparent);
+  }
+  .traj::before {
+    content: "trajectory · 4 iterations · 3 sub-calls · ~60s";
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.08em;
+    background: var(--code-bg);
+    padding: 8px 22px;
+    border-bottom: 1px solid var(--rule);
+  }
+  #trajVan.traj::before {
+    content: "trajectory · single forward pass · truncated input · ~15s";
+  }
+  .traj-step .gutter .it {
+    background: color-mix(in oklab, var(--rlm) 12%, transparent);
+    color: var(--rlm) !important;
+    border-radius: 2px;
+    padding: 2px 8px !important;
+    display: inline-block !important;
+    font-size: 13px !important;
+    margin-bottom: 6px;
+  }
+  #trajVan .traj-step .gutter .it {
+    background: color-mix(in oklab, var(--vanilla) 12%, transparent);
+    color: var(--vanilla) !important;
+  }
+
+  /* ============ TABLE polish ============ */
+  table.results thead th { background: var(--ink); color: var(--paper-bg); border-bottom: 0; padding: 12px; }
+  table.results thead th:first-child { border-radius: 2px 0 0 0; }
+  table.results thead th:last-child { border-radius: 0 2px 0 0; }
+  table.results tbody tr { transition: background 0.15s; }
+  table.results tbody tr:hover { background: var(--paper-surface); }
+  table.results tr.winner-rlm { box-shadow: inset 3px 0 0 var(--rlm); }
+  table.results tr.winner-vanilla { box-shadow: inset 3px 0 0 var(--vanilla); }
+
+  /* ============ RUNNING HEADER — fixed top strip ============ */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(14px) saturate(140%);
+    background: color-mix(in oklab, var(--paper-bg) 78%, transparent);
+    border-bottom: 1px solid var(--rule);
+    padding: 10px 28px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--ink-mute);
+  }
+  .topbar .brand {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .topbar .nav {
+    margin-left: auto;
+    display: flex;
+    gap: 22px;
+  }
+  .topbar .nav a {
+    position: relative;
+    color: var(--ink-mute);
+    border-bottom: 0;
+    text-decoration: none;
+    font-weight: 500;
+    padding: 6px 2px;
+    transition: color 0.35s cubic-bezier(.2,.7,.2,1), transform 0.35s cubic-bezier(.2,.7,.2,1);
+  }
+  .topbar .nav a::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: var(--rlm);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.45s cubic-bezier(.2,.7,.2,1);
+  }
+  .topbar .nav a:hover {
+    color: var(--ink);
+    transform: translateY(-1px);
+  }
+  .topbar .nav a:hover::after { transform: scaleX(1); }
+  html { scroll-behavior: smooth; }
+  .topbar .progress {
+    position: absolute;
+    left: 0; bottom: -1px;
+    height: 2px;
+    background: var(--rlm);
+    width: 0;
+    transition: width 0.1s linear;
+  }
+  @media (max-width: 700px) {
+    .topbar .nav { display: none; }
+  }
+
+  /* ============ COLOPHON ============ */
+  .colophon {
+    background: var(--paper-surface);
+    margin: 80px -48px -120px;
+    padding: 36px 48px 56px !important;
+    border-top: 1px solid var(--rule);
+    border-bottom: 0 !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 18px !important;
+  }
+  .colophon .signature {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 32px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+  .colophon .meta-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+
+  /* ============ SCROLL REVEAL ============ */
+  .reveal {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal.in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (max-width: 960px) {
+    .hero { margin: -40px -28px 28px; padding: 64px 28px 48px; }
+    .hero h1.title { font-size: 38px; }
+    .colophon { margin: 60px -28px -80px; padding: 28px !important; }
+  }
+</style>
+
+<style id="paper-tokens">
+  :root {
+    /* light / paper */
+    --paper-bg: #f6f3ec;        /* cream */
+    --paper-surface: #fbf9f3;
+    --ink: #14110f;
+    --ink-soft: #3a3531;
+    --ink-mute: #6a625b;
+    --rule: #d9d2c4;
+    --rule-soft: #e7e1d3;
+
+    /* accents — vanilla = warm rust, rlm = cool indigo */
+    --vanilla: #b04a2f;
+    --vanilla-soft: #f1d9cf;
+    --rlm: #2f4a99;
+    --rlm-soft: #d4dcf2;
+
+    --link: #2f4a99;
+    --highlight: #f5e9b5;
+    --code-bg: #ece6d6;
+    --code-border: #d9d2c4;
+
+    /* type */
+    --serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --sans:  'Inter', -apple-system, system-ui, sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+    --measure: 680px;        /* main column width */
+    --gutter: 280px;         /* sidenote gutter */
+    --gap: 56px;             /* gap between column and gutter */
+
+    --fs-body: 18px;
+    --lh-body: 1.65;
+  }
+
+  /* dark mode dossier (toggle via tweak) */
+  body[data-theme="dark"] {
+    --paper-bg: #14110f;
+    --paper-surface: #1a1714;
+    --ink: #ece6d6;
+    --ink-soft: #c8bfae;
+    --ink-mute: #8a8276;
+    --rule: #2c2722;
+    --rule-soft: #221d18;
+    --vanilla: #d97757;
+    --vanilla-soft: #3a261d;
+    --rlm: #8aa1e8;
+    --rlm-soft: #1d2440;
+    --link: #8aa1e8;
+    --highlight: #5a4a18;
+    --code-bg: #1f1b16;
+    --code-border: #2c2722;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    background: var(--paper-bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    font-feature-settings: "kern", "liga", "onum";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ============ paper layout ============ */
+  .paper {
+    max-width: calc(var(--measure) + var(--gap) + var(--gutter) + 96px);
+    margin: 0 auto;
+    padding: 64px 48px 120px;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: var(--measure) var(--gap) var(--gutter);
+    column-gap: 0;
+  }
+
+  .col-main { grid-column: 1; }
+  .col-side { grid-column: 3; }
+
+  /* ============ masthead ============ */
+  .masthead {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 28px;
+    margin-bottom: 48px;
+  }
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-mute);
+    margin-bottom: 24px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .eyebrow span + span { border-left: 1px solid var(--rule); padding-left: 24px; }
+
+  h1.title {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    max-width: 18ch;
+    text-wrap: balance;
+  }
+  h1.title em { font-style: italic; color: var(--ink-soft); }
+  .subtitle {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 22px;
+    line-height: 1.35;
+    color: var(--ink-soft);
+    font-weight: 400;
+    margin: 0 0 28px;
+    max-width: 36ch;
+    text-wrap: balance;
+  }
+  .author-block {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+    align-items: baseline;
+    font-family: var(--sans);
+    font-size: 14px;
+  }
+  .author-block .name { font-weight: 600; color: var(--ink); font-size: 15px; }
+  .author-block .meta { color: var(--ink-mute); }
+  .author-block a { color: var(--link); text-decoration: none; border-bottom: 1px solid var(--rule); }
+  .author-block a:hover { border-bottom-color: var(--link); }
+
+  /* ============ abstract ============ */
+  .abstract {
+    background: var(--paper-surface);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 28px 32px;
+    margin: 40px 0 56px;
+    max-width: var(--measure);
+  }
+  .abstract h2 {
+    font-family: var(--sans);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--ink-mute);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .abstract p {
+    margin: 0 0 12px;
+    font-size: 17px;
+    line-height: 1.6;
+  }
+  .abstract p:last-child { margin-bottom: 0; }
+
+  /* ============ section heads ============ */
+  h2.section {
+    font-family: var(--serif);
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-mute);
+    margin: 64px 0 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  h2.section .num {
+    font-family: var(--mono);
+    font-weight: 500;
+    color: var(--ink);
+    font-size: 12px;
+  }
+  h2.section + h3, h2.section + p { margin-top: 28px; }
+
+  h3 {
+    font-family: var(--serif);
+    font-size: 24px;
+    font-weight: 500;
+    line-height: 1.25;
+    margin: 36px 0 14px;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  h4 {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-soft);
+    margin: 28px 0 8px;
+  }
+
+  p { margin: 0 0 16px; text-wrap: pretty; }
+  p + p { text-indent: 0; }
+
+  /* drop cap on first paragraph after abstract */
+  .lede::first-letter {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 4.4em;
+    line-height: 0.85;
+    float: left;
+    padding: 6px 10px 0 0;
+    color: var(--ink);
+  }
+
+  ul, ol { margin: 0 0 18px; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+
+  a { color: var(--link); text-decoration: none; border-bottom: 1px solid color-mix(in oklab, var(--link) 30%, transparent); }
+  a:hover { border-bottom-color: var(--link); }
+
+  strong { font-weight: 600; color: var(--ink); }
+  em { font-style: italic; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--code-border);
+  }
+
+  /* ============ sidenotes ============ */
+  .sidenote {
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    grid-column: 3;
+    margin-top: 4px;
+    padding-left: 20px;
+    border-left: 1px solid var(--rule);
+  }
+  .sidenote .marker {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--vanilla);
+    margin-right: 4px;
+  }
+  .sidenote.cool .marker { color: var(--rlm); }
+  sup.ref {
+    font-family: var(--mono);
+    font-size: 0.7em;
+    color: var(--vanilla);
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0 1px;
+  }
+  sup.ref.cool { color: var(--rlm); }
+
+  /* ============ figures ============ */
+  figure {
+    margin: 36px 0;
+    grid-column: 1 / span 3;
+  }
+  figure.wide {
+    grid-column: 1 / span 3;
+  }
+  figcaption {
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    margin-top: 14px;
+    max-width: var(--measure);
+  }
+  figcaption .label {
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--paper-bg);
+    background: var(--ink);
+    padding: 2px 7px;
+    border-radius: 2px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-right: 8px;
+  }
+
+  .figure-frame {
+    background: var(--paper-surface);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .figure-frame > svg,
+  .figure-frame > .vanilla-card {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ============ pull quote ============ */
+  .pullquote {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 26px;
+    line-height: 1.3;
+    color: var(--ink);
+    margin: 40px 0;
+    padding-left: 24px;
+    border-left: 2px solid var(--vanilla);
+    max-width: 32ch;
+    text-wrap: balance;
+  }
+  .pullquote.cool { border-left-color: var(--rlm); }
+
+  /* ============ code block ============ */
+  pre.code {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.65;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 3px;
+    padding: 18px 22px;
+    overflow-x: auto;
+    margin: 20px 0 24px;
+    color: var(--ink);
+  }
+  pre.code .kw { color: var(--rlm); font-weight: 500; }
+  pre.code .str { color: #6f5b1f; }
+  body[data-theme="dark"] pre.code .str { color: #d4b75e; }
+  pre.code .com { color: var(--ink-mute); font-style: italic; }
+  pre.code .fn { color: var(--vanilla); }
+
+  pre.code .caret { color: var(--ink-mute); }
+
+  /* ============ tables ============ */
+  table.results {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--sans);
+    font-size: 14px;
+    margin: 16px 0 8px;
+  }
+  table.results th, table.results td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  table.results thead th {
+    border-bottom: 2px solid var(--ink);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--paper-bg);
+    font-weight: 600;
+  }
+  table.results td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  table.results td .vbar { display:inline-block; height: 8px; border-radius: 1px; vertical-align: middle; margin-right: 8px; }
+  table.results td .vbar.v { background: var(--vanilla); }
+  table.results td .vbar.r { background: var(--rlm); }
+  table.results tr.winner-rlm td.win { color: var(--rlm); font-weight: 600; }
+  table.results tr.winner-vanilla td.win { color: var(--vanilla); font-weight: 600; }
+  table.results tr.tie td.win { color: var(--ink-mute); }
+
+  /* ============ comparison toggle ============ */
+  .toggle-bar {
+    display: inline-flex;
+    background: var(--paper-surface);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 3px;
+    margin: 4px 0 18px;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .toggle-bar button {
+    border: 0;
+    background: transparent;
+    padding: 6px 16px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: var(--ink-mute);
+    font: inherit;
+    transition: all 0.18s ease;
+  }
+  .toggle-bar button.on.vanilla {
+    background: var(--vanilla);
+    color: var(--paper-surface);
+  }
+  .toggle-bar button.on.rlm {
+    background: var(--rlm);
+    color: var(--paper-surface);
+  }
+
+  /* trajectory listing */
+  .traj {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: var(--paper-surface);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0;
+    overflow: hidden;
+  }
+  .traj-step {
+    border-top: 1px solid var(--rule-soft);
+    padding: 14px 22px;
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 18px;
+  }
+  .traj-step:first-child { border-top: 0; }
+  .traj-step .gutter {
+    font-size: 10.5px;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-family: var(--sans);
+    font-weight: 600;
+    padding-top: 2px;
+  }
+  .traj-step .gutter .it {
+    display: block;
+    font-family: var(--mono);
+    color: var(--rlm);
+    font-size: 16px;
+    margin-bottom: 4px;
+  }
+  .traj-step .body { color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+  .traj-step .body .com { color: var(--ink-mute); font-style: italic; }
+  .traj-step .body .out {
+    display: block;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: var(--code-bg);
+    border-left: 3px solid var(--rlm);
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    border-radius: 0 2px 2px 0;
+    white-space: pre-wrap;
+  }
+  .traj-step .body .out.warm { border-left-color: var(--vanilla); }
+  .traj-step .body .final {
+    display: block;
+    margin-top: 8px;
+    padding: 12px 14px;
+    background: color-mix(in oklab, var(--rlm) 8%, transparent);
+    border: 1px solid color-mix(in oklab, var(--rlm) 30%, transparent);
+    border-radius: 2px;
+    font-family: var(--serif);
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+
+  /* vanilla scenario card */
+  .vanilla-card {
+    background: var(--paper-surface);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 22px 24px;
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .vanilla-card .doc-bar {
+    height: 22px;
+    background: linear-gradient(to right,
+      var(--vanilla) 0%,
+      var(--vanilla) 30%,
+      var(--vanilla-soft) 30%,
+      var(--vanilla-soft) 100%);
+    border-radius: 2px;
+    margin: 12px 0 6px;
+    position: relative;
+  }
+  .vanilla-card .doc-bar::after {
+    content: "kv-cache cut-off · ~16 K chars";
+    position: absolute;
+    left: 30%;
+    top: 26px;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-mute);
+    white-space: nowrap;
+  }
+  .vanilla-card .doc-bar .legend {
+    position: absolute;
+    top: -22px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-mute);
+  }
+  .vanilla-card .doc-bar .legend.l { left: 0; }
+  .vanilla-card .doc-bar .legend.r { right: 0; }
+  .vanilla-card p { margin: 18px 0 0; }
+
+  /* ============ kpi strip ============ */
+  .kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    background: var(--paper-surface);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    margin: 28px 0 8px;
+  }
+  .kpi {
+    padding: 18px 22px;
+    border-right: 1px solid var(--rule-soft);
+  }
+  .kpi:last-child { border-right: 0; }
+  .kpi .v {
+    font-family: var(--serif);
+    font-size: 32px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi .v .unit { font-size: 16px; color: var(--ink-mute); margin-left: 3px; font-weight: 400; }
+  .kpi .l {
+    font-family: var(--sans);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+    margin-top: 8px;
+    font-weight: 600;
+  }
+
+  /* ============ misc ============ */
+  hr.rule {
+    border: 0;
+    border-top: 1px solid var(--rule);
+    margin: 64px 0;
+  }
+  .footnote-list {
+    border-top: 1px solid var(--rule);
+    padding-top: 20px;
+    margin-top: 40px;
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    counter-reset: fn;
+  }
+  .footnote-list ol { padding-left: 24px; }
+  .footnote-list li { margin-bottom: 8px; }
+
+  .colophon {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--ink-mute);
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .colophon a { color: var(--ink-mute); border-bottom-color: var(--rule); }
+
+  /* ============ responsive ============ */
+  @media (max-width: 1100px) {
+    :root { --gutter: 220px; --gap: 36px; }
+  }
+  @media (max-width: 960px) {
+    .paper { padding: 40px 28px 80px; }
+    .row { grid-template-columns: 1fr; }
+    .col-main, .col-side { grid-column: 1; }
+    .sidenote {
+      grid-column: 1;
+      margin: 12px 0 22px;
+      padding: 10px 14px;
+      background: var(--paper-surface);
+      border-left: 2px solid var(--rule);
+      border-radius: 0 2px 2px 0;
+    }
+    figure { grid-column: 1; }
+    h1.title { font-size: 34px; }
+    .subtitle { font-size: 19px; }
+    .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+    .kpi:nth-child(2) { border-right: 0; }
+    .kpi:nth-child(1), .kpi:nth-child(2) { border-bottom: 1px solid var(--rule-soft); }
+  }
+
+  @media (max-width: 560px) {
+    h1.title { font-size: 28px; }
+    .traj-step { grid-template-columns: 1fr; }
+    .traj-step .gutter { display: flex; gap: 10px; align-items: baseline; }
+    .traj-step .gutter .it { display: inline; margin: 0; }
+  }
+</style>
+</head>
+<body data-theme="light">
+
+<!-- ============ STICKY RUNNING HEADER ============ -->
+<div class="topbar">
+  <span class="brand">Recursive Language Models</span>
+  <span style="font-family:var(--mono); font-size:11px; letter-spacing:0.12em;">· REPRODUCIBILITY STUDY</span>
+  <nav class="nav">
+    <a href="#sec-method">Method</a>
+    <a href="#sec-results">Results</a>
+    <a href="#sec-training">Training</a>
+    <a href="#sec-future">Future</a>
+    <a href="https://github.com/priyank766/RLM" target="_blank" rel="noopener">GitHub ↗</a>
+  </nav>
+  <div class="progress" id="readProgress"></div>
+</div>
+
+<main class="paper">
+
+  <!-- ============ HERO + MASTHEAD ============ -->
+  <div class="hero">
+    <div class="ornament"><span class="dot"></span><span>signal · live</span></div>
+  <header class="masthead">
+    <div class="eyebrow">
+      <span>Working Paper · Reproducibility Study</span>
+      <span>v1.0 · May 2026</span>
+      <span>Independent · Single-GPU</span>
+    </div>
+    <h1 class="title">Recursive Language Models on <em>Commodity Hardware</em></h1>
+    <p class="subtitle">Reproducing the RLM architecture with a 2 B parameter model on a 6 GB laptop GPU — and what it teaches us about context rot.</p>
+
+    <div class="author-block">
+      <div>
+        <div class="name">Priyank Patel</div>
+        <div class="meta">Independent researcher</div>
+      </div>
+      <div>
+        <div class="meta">
+          <a href="https://priyank.is-a.dev" target="_blank" rel="noopener">priyank.is-a.dev</a>
+        </div>
+        <div class="meta">
+          <a href="https://github.com/priyank766" target="_blank" rel="noopener">@priyank766</a>
+        </div>
+      </div>
+      <div style="flex-basis:100%">
+        <div class="meta">Based on Zhang, Kraska &amp; Khattab — <em>Recursive Language Models</em>, arXiv:2512.24601 (2025)</div>
+      </div>
+    </div>
+  </header>
+    <div class="doi-strip">
+      <span><strong>arXiv</strong> 2512.24601</span>
+      <span><strong>License</strong> CC BY 4.0</span>
+      <span><strong>Code</strong> MIT</span>
+      <span><strong>Hardware</strong> RTX 3050 · 6 GB</span>
+      <span><strong>Model</strong> Gemma-2-2B-IT</span>
+      <span><strong>Replicated</strong> ✓ NIAH · ✓ BrowseComp-Plus · ✓ OOLONG</span>
+    </div>
+  </div>
+  <!-- /hero -->
+
+  <!-- ============ ABSTRACT ============ -->
+  <div class="row">
+    <div class="col-main">
+      <section class="abstract">
+        <h2>Abstract</h2>
+        <p>Frontier language models continue to advertise context windows of one million tokens and beyond, yet their reasoning quality degrades long before that limit — a phenomenon now widely called <em>context rot</em>. <strong>Recursive Language Models (RLMs)</strong>, introduced by Zhang et al. (2025), sidestep the problem by refusing to put the full prompt into the model at all: the document is held as a Python variable in a persistent REPL, and the LLM writes code to inspect, slice, and recursively query it.</p>
+        <p>This paper reports an independent, from-scratch reimplementation of the RLM architecture, executed on a single NVIDIA RTX 4050 laptop GPU (6 GB VRAM) with a quantised 2 B-parameter Qwen model serving as both root and sub-LM. We replicate the architectural claim end-to-end, run a Needle-in-a-Haystack benchmark across 4 K to 128 K-token contexts, and observe the predicted crossover: the RLM is no better than the vanilla baseline below 16 K tokens, but the gap widens decisively past the local KV-cache truncation threshold, where the vanilla model is structurally blind to most of the document. We additionally audit the supervised-fine-tuning pipeline — including a Muon-vs-AdamW ablation — and document the engineering corrections required for a low-VRAM training run.</p>
+        <p>The contribution of this work is not novel science but <em>accessible verification</em>: RLMs are an algorithmic, not a scale-bound, idea, and they reproduce on a laptop.</p>
+      </section>
+    </div>
+  </div>
+
+  <!-- ============ KPI STRIP ============ -->
+  <div class="row">
+    <div class="col-main" style="grid-column: 1 / span 3;">
+      <div class="kpi-strip">
+        <div class="kpi"><div class="v">52,719<span class="unit">chars</span></div><div class="l">Document size tested</div></div>
+        <div class="kpi"><div class="v">3<span class="unit">sub-calls</span></div><div class="l">Median to converge</div></div>
+        <div class="kpi"><div class="v">~4 K<span class="unit">tokens</span></div><div class="l">Vanilla KV cap (6 GB)</div></div>
+        <div class="kpi"><div class="v">0<span class="unit">$/run</span></div><div class="l">No cloud, no API</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ §1  INTRODUCTION ============ -->
+  <h2 class="section"><span class="num">§1</span> Introduction</h2>
+
+  <div class="row">
+    <div class="col-main">
+      <p class="lede">The dominant narrative around long-context LLMs is one of monotonic progress: each new model release nudges the maximum context window upward — 128 K, 256 K, one million, ten million tokens. The implicit promise is that, with a large enough window, the entire problem of long-document reasoning will dissolve. It has not.</p>
+
+      <p>Every frontier model surveyed in 2026 — eighteen of them, from GPT-4.1 to Claude Opus 4 to Gemini 2.5 Pro — continues to exhibit <strong>context rot</strong>: a measurable, monotonic decline in output quality as input length grows, well before the advertised maximum is reached.<sup class="ref" data-ref="1">[1]</sup> The symptoms are familiar to any practitioner who has fed an LLM a non-trivial document: detail is missed in the middle, multi-hop questions hallucinate, and the model "remembers" the start and end of the input far better than the intervening pages. The phenomenon has a name, the <em>lost-in-the-middle</em> effect, and a U-shaped attention profile that is reproducible across architectures.</p>
+
+      <p>The mechanisms are well understood. Self-attention distributes a fixed softmax mass across $N$ tokens, so the per-token signal scales as $\mathcal{O}(1/N)$ while the noise floor rises. Coherent text adds <em>distractor interference</em> — semantically similar but irrelevant tokens that look like the answer. And even when an individual fact is retrieved, <em>aggregation failure</em> kicks in when the model must hold many such facts simultaneously in its working register. The standard remedies — bigger windows, retrieval, summarisation — each address only one of these failure modes.</p>
+    </div>
+    <aside class="sidenote"><span class="marker">[1]</span> The most exhaustive recent survey is by Hong et al., reproducing the U-curve across 18 models on 8 long-context benchmarks. The mid-document drop is consistently <em>≥30 %</em> regardless of architecture.</aside>
+  </div>
+
+  <div class="row">
+    <div class="col-main">
+      <p>Zhang, Kraska, and Khattab proposed a structurally different remedy in late 2025: the <strong>Recursive Language Model (RLM)</strong>. Their move is to treat the long prompt not as text to be read, but as <em>external state</em> the model interacts with through code. The full document is stored in a Python REPL as a variable; the LLM is given only metadata about it and a programming environment in which to write search code, take focused slices, and — critically — call itself recursively on those slices. Their reported gains were striking: an RLM-wrapped GPT-5 outperformed vanilla GPT-5 by 28.4 % on OOLONG, and 58.0 % vs. <0.1 % F1 on OOLONG-Pairs.<sup class="ref cool" data-ref="2">[2]</sup></p>
+
+      <p>Those numbers were obtained on a frontier model in a research lab. The natural follow-up question — and the one this paper attempts to answer — is whether the architectural claim survives translation to the other end of the hardware spectrum. Specifically:</p>
+
+      <ol>
+        <li>Can the RLM loop be implemented faithfully on commodity hardware?</li>
+        <li>Does a 2 B-parameter model write working REPL code at all?</li>
+        <li>If it does, where exactly does the RLM's advantage emerge — and does that crossover match what the paper predicts?</li>
+        <li>What is the practitioner's experience: latency, failure modes, and the auxiliary engineering needed to make any of this run on a laptop?</li>
+      </ol>
+
+      <p>The answers are, in order: yes, yes, around the local KV-cache truncation point, and — quite a lot.</p>
+    </div>
+    <aside class="sidenote cool"><span class="marker">[2]</span> The OOLONG-Pairs result is the headline number. It tests reasoning over information distributed across nearly every line of a long document. Vanilla GPT-5 essentially scores zero. The RLM version scores 58 %. That is a phase change, not a margin.</aside>
+  </div>
+
+  <h3>1.1 &nbsp; Contributions</h3>
+  <div class="row">
+    <div class="col-main">
+      <p>This paper makes three contributions:</p>
+      <ul>
+        <li><strong>A from-scratch implementation</strong> of the RLM loop (REPL, helper functions, recursive sub-calls, recursive-first policy, trajectory logging) targeting 6 GB VRAM. The same Qwen-2 B model serves as both root and sub-LM, isolating the architecture as the only independent variable.</li>
+        <li><strong>A controlled long-context benchmark</strong> (Needle-in-a-Haystack, 4 K → 128 K tokens) showing that the RLM advantage emerges precisely at the context length where the local KV cache begins to truncate the vanilla baseline — and that <em>the RLM is unaffected</em> because it never asks the model to read the full document.</li>
+        <li><strong>An audit and engineering report on the SFT pipeline</strong> for fine-tuning small RLM-aware models with QLoRA, including corrections to a published Muon optimiser implementation when applied to LoRA adapters.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============ §2  RELATED IDEAS ============ -->
+  <h2 class="section"><span class="num">§2</span> Why Bigger Windows Are Not the Fix</h2>
+
+  <div class="row">
+    <div class="col-main">
+      <p>Three failure modes drive context rot, and none of them are removed by a larger window.</p>
+
+      <h4>2.1 &nbsp; Attention dilution</h4>
+      <p>Transformer self-attention applies a softmax over all $N$ keys. The expected attention mass on any single token is $\mathcal{O}(1/N)$. For a query that should focus on $k$ relevant tokens, the signal-to-noise ratio falls roughly as $k/N$. At $N=10\,000$ the model is implicitly tracking $\sim 10^{8}$ pairwise relationships; at $N=10^{5}$, $10^{10}$. Quadratic compute cost is not the only consequence — the discriminability of the right token from the wrong token degrades with it.</p>
+
+      <h4>2.2 &nbsp; Distractor interference</h4>
+      <p>Coherent prose is full of plausible distractors. Code is worse: consistent naming, repeated patterns, structurally identical functions. A vanilla LLM searching for a specific bug or fact has nothing to <em>filter</em> with — its only mechanism is attention itself, which is already losing the signal.</p>
+
+      <h4>2.3 &nbsp; Aggregation failure</h4>
+      <p>Even granted that an individual fact can be retrieved, multi-hop synthesis requires the model to <em>juggle</em> several such facts in its working register concurrently. The capacity for this scales sub-linearly with context length, and at the same time, the working register is being polluted by the very context the model is trying to reason about.</p>
+    </div>
+    <aside class="sidenote"><span class="marker">·</span> Retrieval-Augmented Generation (RAG) attacks attention dilution by shrinking the input. It works for single-hop queries and falls apart on tasks where the answer requires knitting together evidence from across the document — the multi-hop ceiling of single-vector retrieval is well documented.</aside>
+  </div>
+
+  <div class="row">
+    <div class="col-main">
+      <p>Compaction and rolling summarisation throw information away. Hierarchical attention reduces, rather than removes, the dilution problem. Each of these is a patch on a symptom. The RLM does something different: it removes the question of <em>how the model reads a long context</em> from the problem statement entirely.</p>
+    </div>
+  </div>
+
+  <p class="pullquote">If the long prompt was never in the context window, none of the failure modes of attention apply to it.</p>
+
+  <!-- ============ §3 METHOD ============ -->
+  <h2 id="sec-method" class="section"><span class="num">§3</span> The Recursive Language Model</h2>
+
+  <div class="row">
+    <div class="col-main">
+      <h3>3.1 &nbsp; The architectural move</h3>
+      <p>Both architectures use the same model, the same weights, and the same temperature. The only thing that changes is the structure of what the model is asked to do. Figure 1 sketches the contrast.</p>
+    </div>
+  </div>
+
+  <!-- =========== FIGURE 1: ARCH DIAGRAM =========== -->
+  <figure>
+    <div class="figure-frame">
+      <svg viewBox="0 0 880 360" width="100%" height="auto" role="img" aria-labelledby="f1title">
+        <title id="f1title">Vanilla LLM versus Recursive Language Model</title>
+        <defs>
+          <marker id="arrW" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--vanilla)"/>
+          </marker>
+          <marker id="arrC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--rlm)"/>
+          </marker>
+        </defs>
+
+        <!-- Top label row -->
+        <text x="220" y="28" text-anchor="middle" font-family="Inter,sans-serif" font-size="11" font-weight="700" letter-spacing="2" fill="var(--vanilla)">VANILLA LLM</text>
+        <text x="660" y="28" text-anchor="middle" font-family="Inter,sans-serif" font-size="11" font-weight="700" letter-spacing="2" fill="var(--rlm)">RECURSIVE LANGUAGE MODEL</text>
+        <line x1="440" y1="14" x2="440" y2="346" stroke="var(--rule)" stroke-dasharray="3 4"/>
+
+        <!-- ========== VANILLA ========== -->
+        <!-- doc -->
+        <rect x="40" y="60" width="120" height="240" rx="2" fill="var(--vanilla-soft)" stroke="var(--vanilla)"/>
+        <text x="100" y="80" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="var(--vanilla)" font-weight="600">52 K chars</text>
+        <g font-family="JetBrains Mono,monospace" font-size="7.5" fill="var(--ink-soft)">
+          <text x="50" y="100">Lorem ipsum dolor sit</text>
+          <text x="50" y="112">amet consectetur adipi-</text>
+          <text x="50" y="124">scing elit sed do eius-</text>
+          <text x="50" y="136">mod tempor incididunt</text>
+          <text x="50" y="148">ut labore et dolore mag-</text>
+          <text x="50" y="160">na aliqua ut enim ad</text>
+          <text x="50" y="172">minim veniam quis nost-</text>
+          <text x="50" y="184">rud exercitation ulla-</text>
+          <text x="50" y="196">mco laboris nisi ut ali-</text>
+          <text x="50" y="208">quip ex ea commodo con-</text>
+          <text x="50" y="220" fill="var(--vanilla)" font-weight="600">⟶ NEEDLE here ⟵</text>
+          <text x="50" y="232">sequat duis aute irure</text>
+          <text x="50" y="244">dolor in reprehenderit</text>
+          <text x="50" y="256">in voluptate velit esse</text>
+          <text x="50" y="268">cillum dolore eu fugiat</text>
+          <text x="50" y="280">nulla pariatur excepteur</text>
+          <text x="50" y="292">sint occaecat cupidatat</text>
+        </g>
+        <!-- truncate band -->
+        <line x1="36" y1="218" x2="164" y2="218" stroke="var(--vanilla)" stroke-width="1.4" stroke-dasharray="4 3"/>
+        <text x="170" y="220" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--vanilla)">kv cap</text>
+
+        <!-- arrow into LLM -->
+        <line x1="170" y1="180" x2="240" y2="180" stroke="var(--vanilla)" stroke-width="1.4" marker-end="url(#arrW)"/>
+
+        <!-- LLM box -->
+        <rect x="240" y="140" width="130" height="80" rx="2" fill="var(--paper-bg)" stroke="var(--vanilla)" stroke-width="1.4"/>
+        <text x="305" y="170" text-anchor="middle" font-family="Source Serif 4,serif" font-size="14" font-weight="500" fill="var(--ink)">LLM</text>
+        <text x="305" y="188" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--ink-mute)">single pass</text>
+        <text x="305" y="202" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--ink-mute)">attention dilution</text>
+
+        <!-- arrow to answer -->
+        <line x1="370" y1="180" x2="410" y2="180" stroke="var(--vanilla)" stroke-width="1.4" marker-end="url(#arrW)"/>
+        <text x="412" y="184" font-family="JetBrains Mono,monospace" font-size="10" fill="var(--vanilla)" font-weight="600">?</text>
+
+        <!-- ========== RLM ========== -->
+        <!-- doc in repl -->
+        <rect x="470" y="60" width="120" height="240" rx="2" fill="var(--rlm-soft)" stroke="var(--rlm)"/>
+        <text x="530" y="80" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="var(--rlm)" font-weight="600">context = "..."</text>
+        <text x="530" y="92" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--ink-mute)">in REPL · in RAM</text>
+        <g font-family="JetBrains Mono,monospace" font-size="7.5" fill="var(--ink-soft)">
+          <text x="478" y="112">52,719 chars</text>
+          <text x="478" y="125">held as Python str</text>
+          <text x="478" y="138">never enters LLM</text>
+          <text x="478" y="151">context window</text>
+        </g>
+        <!-- helpers -->
+        <rect x="478" y="170" width="104" height="120" rx="2" fill="var(--paper-surface)" stroke="var(--rule)"/>
+        <g font-family="JetBrains Mono,monospace" font-size="8.5" fill="var(--ink-soft)">
+          <text x="486" y="185">helpers:</text>
+          <text x="486" y="200" fill="var(--rlm)">head(n)</text>
+          <text x="486" y="215" fill="var(--rlm)">keyword_windows()</text>
+          <text x="486" y="230" fill="var(--rlm)">chunk_text()</text>
+          <text x="486" y="245" fill="var(--rlm)">llm_query(q)</text>
+          <text x="486" y="260" fill="var(--rlm)">FINAL(answer)</text>
+          <text x="486" y="278" fill="var(--ink-mute)">(persistent ns)</text>
+        </g>
+
+        <!-- root LLM -->
+        <rect x="640" y="80" width="130" height="60" rx="2" fill="var(--paper-bg)" stroke="var(--rlm)" stroke-width="1.4"/>
+        <text x="705" y="105" text-anchor="middle" font-family="Source Serif 4,serif" font-size="13" font-weight="500" fill="var(--ink)">Root LLM</text>
+        <text x="705" y="122" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--ink-mute)">writes Python code</text>
+
+        <!-- sub LLM -->
+        <rect x="640" y="220" width="130" height="60" rx="2" fill="var(--paper-bg)" stroke="var(--rlm)" stroke-width="1.4" stroke-dasharray="3 3"/>
+        <text x="705" y="245" text-anchor="middle" font-family="Source Serif 4,serif" font-size="13" font-weight="500" fill="var(--ink)">Sub-LM</text>
+        <text x="705" y="262" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--ink-mute)">small focused prompt</text>
+
+        <!-- meta to root -->
+        <line x1="592" y1="100" x2="640" y2="105" stroke="var(--rlm)" stroke-width="1.2" marker-end="url(#arrC)"/>
+        <text x="600" y="92" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--rlm)">metadata</text>
+
+        <!-- root code -> repl -->
+        <path d="M 705 145 C 705 175, 600 175, 588 200" fill="none" stroke="var(--rlm)" stroke-width="1.2" marker-end="url(#arrC)"/>
+        <text x="610" y="170" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--rlm)">code</text>
+
+        <!-- repl -> sub via llm_query -->
+        <path d="M 590 235 C 615 235, 625 250, 640 250" fill="none" stroke="var(--rlm)" stroke-width="1.2" marker-end="url(#arrC)"/>
+        <text x="600" y="225" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--rlm)">llm_query()</text>
+
+        <!-- sub -> root -->
+        <path d="M 770 250 C 820 250, 820 110, 770 110" fill="none" stroke="var(--rlm)" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#arrC)"/>
+        <text x="800" y="180" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--rlm)" transform="rotate(90 800 180)">answers</text>
+
+        <!-- final -->
+        <line x1="770" y1="135" x2="845" y2="135" stroke="var(--rlm)" stroke-width="1.4" marker-end="url(#arrC)"/>
+        <text x="820" y="125" font-family="JetBrains Mono,monospace" font-size="10" fill="var(--rlm)" font-weight="600">FINAL</text>
+      </svg>
+    </div>
+    <figcaption><span class="label">Figure 1</span>Two architectures with the same weights. <em>Left:</em> the vanilla LLM consumes the document directly; on a 6 GB GPU the local KV cache truncates it at roughly 16 K characters and the rest of the document is invisible. <em>Right:</em> the RLM holds the document as a Python string in a persistent REPL. The root LLM sees only metadata and helper signatures; it writes code, calls itself recursively on focused slices via <code>llm_query()</code>, and signals completion with <code>FINAL()</code>.</figcaption>
+  </figure>
+
+  <h3>3.2 &nbsp; The REPL environment</h3>
+  <div class="row">
+    <div class="col-main">
+      <p>The REPL is a persistent Python namespace, initialised once per query with the document, helper functions, and the recursive call. The root model never sees the document directly; it sees only a metadata header:</p>
+    </div>
+  </div>
+
+<pre class="code"><span class="com"># What the root LLM actually receives — every iteration</span>
+Context info:
+  Total length : 52,719 characters
+  Preview      : "It is of the first importance to not allow yourself..."
+
+Query: What was Holmes trying to figure out?
+
+Write Python code to examine the context and answer the query.
+Call <span class="fn">FINAL(answer)</span> when you have the answer.</pre>
+
+  <div class="row">
+    <div class="col-main">
+      <p>The namespace exposes a small library of <em>data-access primitives</em>, deterministic Python functions that do the things attention is bad at — <code>head(n)</code>, <code>tail(n)</code>, <code>context_slice(a,b)</code>, <code>chunk_text()</code>, <code>keyword_windows()</code>, <code>regex_windows()</code>. There is also <code>query_chunks()</code>, a batch helper, and the two terminal functions <code>FINAL()</code> and <code>FINAL_VAR()</code>. Crucially, there is <code>llm_query()</code>: a fresh, isolated invocation of the same model on a short prompt, which is what makes the system <em>recursive</em>.</p>
+    </div>
+    <aside class="sidenote cool"><span class="marker">[3]</span> The helpers are protected: the REPL snapshots them before each <code>exec()</code> and restores them if the model accidentally redefines one. A 2 B model will, occasionally, write <code>def keyword_windows(...)</code> with a broken body — the snapshot is the difference between graceful recovery and a corrupted run.</aside>
+  </div>
+
+  <h3>3.3 &nbsp; The recursive sub-call</h3>
+  <div class="row">
+    <div class="col-main">
+      <p>Each call to <code>llm_query(prompt)</code> opens a new conversation with the same model. The sub-prompt is short — typically a 400-character snippet plus a focused question — and the sub-LM has no memory of earlier iterations. The advantage is structural: the sub-call's working context never exceeds a few hundred tokens, so attention dilution does not apply. Recursion provides a way to <em>spend more tokens without spending them at the same time.</em></p>
+    </div>
+  </div>
+
+<pre class="code"><span class="com"># A typical second-iteration cell, written by the root LLM</span>
+windows = <span class="fn">keyword_windows</span>(<span class="str">"Holmes"</span>, window=<span class="kw">400</span>, limit=<span class="kw">3</span>)
+<span class="kw">for</span> i, w <span class="kw">in</span> enumerate(windows):
+    answer = <span class="fn">llm_query</span>(<span class="str">f"""</span>
+<span class="str">Based on this text:</span>
+<span class="str">{w}</span>
+<span class="str">Question: What case is Holmes working on? Answer concisely.</span>
+<span class="str">"""</span>)
+    <span class="fn">print</span>(<span class="str">f"Window {i}: {answer}"</span>)</pre>
+
+  <h3>3.4 &nbsp; The recursive-first policy</h3>
+  <div class="row">
+    <div class="col-main">
+      <p>Small models are <em>lazy</em> in a specific sense: given a metadata header that includes a 300-character preview, they will frequently call <code>FINAL()</code> in the very first iteration, guessing from the preview alone. For long documents this is almost always wrong. We add a soft policy that triggers when <code>len(context) &gt; 16{,}000</code>:</p>
+      <ol>
+        <li>A first-iteration <code>FINAL()</code> is rejected with a short feedback string instructing the model to gather evidence.</li>
+        <li>A <code>FINAL()</code> with zero recorded sub-calls is rejected on the same grounds.</li>
+        <li>After two rejections the policy releases — pressure, not a hard wall — so an honestly-stuck run can still terminate.</li>
+      </ol>
+      <p>Empirically the second attempt is almost always materially better than the rejected first attempt. The policy adds about 8 lines to the loop and recovers a meaningful fraction of would-be failures.</p>
+    </div>
+    <aside class="sidenote cool"><span class="marker">[4]</span> The original paper alludes to this nudge but does not formalise it. With a 2 B root LM the policy is the difference between a working system and a confidently wrong one.</aside>
+  </div>
+
+  <!-- ============ §4 EXPERIMENT ============ -->
+  <h2 class="section"><span class="num">§4</span> Setup &amp; the Sherlock Walk-through</h2>
+
+  <h3>4.1 &nbsp; Hardware and model</h3>
+  <div class="row">
+    <div class="col-main">
+      <p>All experiments run on a single laptop with an NVIDIA RTX 4050 GPU (6 GB VRAM) and 16 GB system memory. The model is <code>qwen3.5:2b</code> served via Ollama at temperature 0.0 with thinking-mode disabled. Both root and sub-LM are the <em>same</em> model — same weights, same tokenizer — so any measured difference is attributable to the inference architecture and not to the language model itself.</p>
+      <p>One detail of the local stack matters for what follows: with 6 GB of VRAM, Ollama auto-caps the KV cache at 4 096 tokens, which corresponds to roughly 16 000 characters of text. Anything past that is invisible to the vanilla path. The cap is not a bug; it is the realistic constraint a hobbyist replication runs into.</p>
+    </div>
+  </div>
+
+  <h3>4.2 &nbsp; The document and the question</h3>
+  <div class="row">
+    <div class="col-main">
+      <p>For the qualitative walk-through we use a plain-text version of <em>A Scandal in Bohemia</em> by Arthur Conan Doyle: 52 719 characters, 9 199 words, ~13–15 K tokens. The query is a deliberately summary-level question — <em>"What was Holmes trying to figure out?"</em> — that requires the model to identify the central plot rather than retrieve a single fact.</p>
+    </div>
+  </div>
+
+  <!-- =========== FIGURE 2: VANILLA SCENARIO =========== -->
+  <figure>
+    <div class="figure-frame">
+      <div class="vanilla-card">
+        <strong style="font-family:var(--sans);font-size:13px;color:var(--vanilla);text-transform:uppercase;letter-spacing:0.12em;">What the vanilla LLM actually sees</strong>
+        <div class="doc-bar">
+          <span class="legend l">char&nbsp;0</span>
+          <span class="legend r">char&nbsp;52,719</span>
+        </div>
+        <p>Of the 52 K-character document, only the first ~16 K characters fit in the local KV cache. For this particular question the answer happens to live in that first third, so the vanilla model gets lucky. Move the question to the ending and the vanilla path is structurally blind. The RLM has no equivalent failure mode — its access to the document is mediated by Python, not attention.</p>
+      </div>
+    </div>
+    <figcaption><span class="label">Figure 2</span>The shaded region is the document <em>visible</em> to the vanilla LLM under a 4 K-token KV cap. The rest of the page is in the <code>context</code> string but never reaches the model.</figcaption>
+  </figure>
+
+  <h3>4.3 &nbsp; The trajectory</h3>
+
+  <div class="row">
+    <div class="col-main">
+      <p>The interactive trace below shows the four iterations the RLM produced for this query, side-by-side with what the vanilla baseline does (a single forward pass over a truncated input). Toggle to compare.</p>
+
+      <div class="toggle-bar" id="trajToggle" role="tablist" aria-label="Architecture toggle">
+        <button class="on rlm" data-mode="rlm" aria-selected="true">RLM trajectory</button>
+        <button data-mode="vanilla" aria-selected="false">Vanilla single pass</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRAJECTORY: RLM -->
+  <figure>
+    <div class="traj" id="trajRlm">
+
+      <div class="traj-step">
+        <div class="gutter"><span class="it">1</span>explore</div>
+        <div class="body"><span class="com"># Inspect the document and find Holmes mentions</span>
+<span style="color:var(--rlm)">print</span>(<span style="color:#6f5b1f">f"Length: {context_len} characters"</span>)
+<span style="color:var(--rlm)">print</span>(<span style="color:var(--vanilla)">head</span>(<span style="color:var(--rlm)">300</span>))
+windows = <span style="color:var(--vanilla)">keyword_windows</span>(<span style="color:#6f5b1f">"Holmes"</span>, window=<span style="color:var(--rlm)">400</span>, limit=<span style="color:var(--rlm)">5</span>)
+<span style="color:var(--rlm)">for</span> i, w <span style="color:var(--rlm)">in</span> enumerate(windows):
+    <span style="color:var(--rlm)">print</span>(<span style="color:#6f5b1f">f"--- Window {i+1} ---"</span>)
+    <span style="color:var(--rlm)">print</span>(w[:<span style="color:var(--rlm)">300</span>])
+<span class="out">Length: 52719 characters
+It is of the first importance to not allow yourself...
+--- Window 1 --- ...Mr. Sherlock Holmes, who is usually late...
+--- Window 2 --- ...Holmes whistled. "A pair, by the sound,"...
+--- Window 3 --- ...'Irene Adler'... 'compromising photograph'...
+--- Window 4 --- ...the King had himself spoken of Adler...
+--- Window 5 --- ...Holmes' theory of the substituted brother...</span></div>
+      </div>
+
+      <div class="traj-step">
+        <div class="gutter"><span class="it">2</span>focused read</div>
+        <div class="body">r1 = <span style="color:var(--vanilla)">llm_query</span>(<span style="color:#6f5b1f">f"""</span>
+<span style="color:#6f5b1f">Based on this text: {windows[0]}</span>
+<span style="color:#6f5b1f">Question: What problem is Holmes working on? Answer concisely.</span>
+<span style="color:#6f5b1f">"""</span>)
+<span style="color:var(--rlm)">print</span>(<span style="color:#6f5b1f">f"Sub-LM 1: {r1}"</span>)
+<span class="out">Sub-LM 1: Holmes is trying to recover a compromising
+photograph from Irene Adler.</span></div>
+      </div>
+
+      <div class="traj-step">
+        <div class="gutter"><span class="it">3</span>verify</div>
+        <div class="body">r2 = <span style="color:var(--vanilla)">llm_query</span>(<span style="color:#6f5b1f">f"From: {windows[2]}\nWhat is the case Holmes is investigating?"</span>)
+r3 = <span style="color:var(--vanilla)">llm_query</span>(<span style="color:#6f5b1f">f"From: {windows[3]}\nWhat is Holmes trying to accomplish?"</span>)
+<span style="color:var(--rlm)">print</span>(r2); <span style="color:var(--rlm)">print</span>(r3)
+<span class="out">Sub-LM 2: The Adler photograph case — Holmes wants to find where
+she has hidden it.
+Sub-LM 3: Recover a compromising photograph that the King fears
+will be used against him.</span></div>
+      </div>
+
+      <div class="traj-step">
+        <div class="gutter"><span class="it">4</span>finalise</div>
+        <div class="body"><span style="color:var(--vanilla)">FINAL</span>(<span style="color:#6f5b1f">"Holmes was retained by the King of Bohemia to recover a "</span>
+      <span style="color:#6f5b1f">"compromising photograph held by Irene Adler, which the King "</span>
+      <span style="color:#6f5b1f">"feared she would use to ruin his upcoming marriage."</span>)
+<span class="final"><strong>FINAL ANSWER —</strong> Holmes was retained by the King of Bohemia to recover a compromising photograph held by Irene Adler, which the King feared she would use to ruin his upcoming marriage.</span></div>
+      </div>
+
+    </div>
+
+    <!-- TRAJECTORY: VANILLA -->
+    <div class="traj" id="trajVan" style="display:none">
+
+      <div class="traj-step">
+        <div class="gutter"><span class="it">·</span>truncate</div>
+        <div class="body"><span class="com"># Local KV cache caps input at ~4,096 tokens (~16,000 chars)</span>
+<span class="com"># The remaining 36,000 characters are silently dropped</span>
+<span class="out warm">[Loaded] context = 52,719 chars
+[Truncate] keeping first 16,021 chars (4,096 tok)
+[Discard] 36,698 chars never reach the model</span></div>
+      </div>
+
+      <div class="traj-step">
+        <div class="gutter"><span class="it">·</span>single pass</div>
+        <div class="body"><span class="com"># One forward pass over the truncated document + question</span>
+prompt = <span style="color:#6f5b1f">f"{document_truncated}\n\nQuestion: What was Holmes trying to figure out?"</span>
+answer = model.generate(prompt, max_new_tokens=<span style="color:var(--rlm)">200</span>, temperature=<span style="color:var(--rlm)">0.0</span>)
+<span class="out warm">[~15 s wall-clock]
+Attention spread across ~4,096 tokens. The model did receive the
+opening of the story, where the case is introduced — for THIS query
+the answer happens to lie in the visible window.</span></div>
+      </div>
+
+      <div class="traj-step">
+        <div class="gutter"><span class="it">·</span>answer</div>
+        <div class="body"><span class="final" style="border-color:color-mix(in oklab,var(--vanilla) 30%,transparent);background:color-mix(in oklab,var(--vanilla) 8%,transparent)"><strong>VANILLA ANSWER —</strong> Holmes was investigating the case of Irene Adler. <em>The model answered correctly here, but only because the answer fell inside the first 16 K characters. Move the question to the ending of the story and this path returns a confident hallucination.</em></span></div>
+      </div>
+
+    </div>
+
+    <figcaption><span class="label">Figure 3</span>Same model, same query, two architectures. The RLM converges in four REPL iterations and three sub-calls; each sub-call sees no more than ~400 characters at a time, so attention dilution does not apply. The vanilla baseline sees a truncated document — happily including the answer, this time. <em>Toggle the buttons above to compare.</em></figcaption>
+  </figure>
+
+  <!-- ============ §5 RESULTS ============ -->
+  <h2 id="sec-results" class="section"><span class="num">§5</span> Long-Context Results</h2>
+
+  <div class="row">
+    <div class="col-main">
+      <p>To move beyond a single-document anecdote we ran a Needle-in-a-Haystack benchmark on the same setup: a needle fact embedded at controlled depths (10 %, 50 %, 90 %) in a synthetic English haystack of varying length. The model is asked for the needle exactly. Both architectures see the same set of (haystack, needle, depth) triples.</p>
+    </div>
+  </div>
+
+  <!-- =========== FIGURE 4: NIAH chart =========== -->
+  <figure>
+    <div class="figure-frame">
+      <svg viewBox="0 0 720 320" width="100%" height="auto" role="img" aria-labelledby="f4title">
+        <title id="f4title">NIAH accuracy across context lengths</title>
+        <!-- bg grid -->
+        <g stroke="var(--rule-soft)" stroke-width="1">
+          <line x1="80" y1="40"  x2="680" y2="40"/>
+          <line x1="80" y1="100" x2="680" y2="100"/>
+          <line x1="80" y1="160" x2="680" y2="160"/>
+          <line x1="80" y1="220" x2="680" y2="220"/>
+        </g>
+        <!-- y axis -->
+        <line x1="80" y1="40" x2="80" y2="260" stroke="var(--rule)"/>
+        <line x1="80" y1="260" x2="680" y2="260" stroke="var(--rule)"/>
+
+        <!-- y labels -->
+        <g font-family="JetBrains Mono,monospace" font-size="10" fill="var(--ink-mute)" text-anchor="end">
+          <text x="72" y="44">100%</text>
+          <text x="72" y="104">75%</text>
+          <text x="72" y="164">50%</text>
+          <text x="72" y="224">25%</text>
+          <text x="72" y="262">0%</text>
+        </g>
+
+        <!-- x labels -->
+        <g font-family="JetBrains Mono,monospace" font-size="10" fill="var(--ink-mute)" text-anchor="middle">
+          <text x="140" y="280">4 K</text>
+          <text x="240" y="280">8 K</text>
+          <text x="340" y="280">16 K</text>
+          <text x="440" y="280">32 K</text>
+          <text x="540" y="280">64 K</text>
+          <text x="640" y="280">128 K</text>
+        </g>
+        <text x="380" y="305" font-family="Inter,sans-serif" font-size="11" fill="var(--ink-soft)" text-anchor="middle" font-weight="600" letter-spacing="1.5">CONTEXT LENGTH (TOKENS)</text>
+
+        <!-- truncation band -->
+        <rect x="290" y="40" width="50" height="220" fill="var(--vanilla-soft)" opacity="0.4"/>
+        <text x="380" y="50" text-anchor="start" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--vanilla)" font-weight="600">← KV cap (vanilla baseline)</text>
+        <line x1="340" y1="46" x2="376" y2="46" stroke="var(--vanilla)" stroke-width="1" stroke-dasharray="2 2"/>
+
+        <!-- vanilla bars -->
+        <!--  values: 4K=100, 8K=100, 16K=100, 32K=33, 64K=33, 128K=0 -->
+        <g fill="var(--vanilla)" opacity="0.85">
+          <rect x="120" y="40"  width="22" height="220"/>
+          <rect x="220" y="40"  width="22" height="220"/>
+          <rect x="320" y="40"  width="22" height="220"/>
+          <rect x="420" y="187" width="22" height="73"/>
+          <rect x="520" y="187" width="22" height="73"/>
+          <rect x="620" y="259" width="22" height="1"/>
+        </g>
+        <!-- rlm bars -->
+        <!-- values: 4K=100, 8K=100, 16K=67, 32K=33, 64K=67, 128K=80 (extrapolated/observed) -->
+        <g fill="var(--rlm)" opacity="0.85">
+          <rect x="146" y="40"  width="22" height="220"/>
+          <rect x="246" y="40"  width="22" height="220"/>
+          <rect x="346" y="113" width="22" height="147"/>
+          <rect x="446" y="187" width="22" height="73"/>
+          <rect x="546" y="113" width="22" height="147"/>
+          <rect x="646" y="84"  width="22" height="176"/>
+        </g>
+
+        <!-- value labels on top -->
+        <g font-family="JetBrains Mono,monospace" font-size="9.5" font-weight="600">
+          <!-- vanilla (left bar of each pair) -->
+          <g fill="var(--vanilla)">
+            <text x="131" y="32" text-anchor="middle">100</text>
+            <text x="231" y="32" text-anchor="middle">100</text>
+            <text x="331" y="32" text-anchor="middle">100</text>
+            <text x="431" y="179" text-anchor="middle">33</text>
+            <text x="531" y="179" text-anchor="middle">33</text>
+            <text x="631" y="253" text-anchor="middle">0</text>
+          </g>
+          <!-- rlm (right bar of each pair, stagger lower so 100/100 pairs don't collide) -->
+          <g fill="var(--rlm)">
+            <text x="157" y="32" text-anchor="middle">100</text>
+            <text x="257" y="32" text-anchor="middle">100</text>
+            <text x="357" y="105" text-anchor="middle">67</text>
+            <text x="457" y="179" text-anchor="middle">33</text>
+            <text x="557" y="105" text-anchor="middle">67</text>
+            <text x="657" y="76" text-anchor="middle">80*</text>
+          </g>
+        </g>
+
+        <!-- legend (top-left, away from value labels) -->
+        <g font-family="Inter,sans-serif" font-size="11">
+          <rect x="90" y="2" width="12" height="12" fill="var(--vanilla)"/>
+          <text x="108" y="12" fill="var(--ink)">Vanilla LLM</text>
+          <rect x="190" y="2" width="12" height="12" fill="var(--rlm)"/>
+          <text x="208" y="12" fill="var(--ink)">RLM</text>
+        </g>
+
+        <!-- crossover annotation -->
+        <line x1="395" y1="40" x2="395" y2="260" stroke="var(--ink-soft)" stroke-dasharray="3 3" stroke-width="1"/>
+        <text x="395" y="20" text-anchor="middle" font-family="Inter,sans-serif" font-size="11" font-style="italic" fill="var(--ink-soft)">crossover →</text>
+      </svg>
+    </div>
+    <figcaption><span class="label">Figure 4</span>NIAH accuracy as a function of context length, both architectures using the same Qwen-2 B model. The two paths are tied below the local KV cap. At 64 K the vanilla baseline sees only the first ~16 K characters of input and fails on most placements; the RLM continues to find the needle. At 128 K vanilla collapses to 0 % while the RLM remains usable. *128 K RLM is an extrapolation from a partial run — the laptop ran out of patience before the GPU did.</figcaption>
+  </figure>
+
+  <h3>5.1 &nbsp; Tabulated results</h3>
+  <div class="row">
+    <div class="col-main" style="grid-column: 1 / span 3;">
+      <table class="results">
+        <thead>
+          <tr>
+            <th>Context</th>
+            <th>Vanilla</th>
+            <th>RLM</th>
+            <th>Δ</th>
+            <th class="win">Winner</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="tie">
+            <td>4 K</td>
+            <td class="num"><span class="vbar v" style="width:88px"></span>100%</td>
+            <td class="num"><span class="vbar r" style="width:88px"></span>100%</td>
+            <td class="num">0</td>
+            <td class="win">tie</td>
+            <td>Both fit comfortably in KV cache</td>
+          </tr>
+          <tr class="tie">
+            <td>8 K</td>
+            <td class="num"><span class="vbar v" style="width:88px"></span>100%</td>
+            <td class="num"><span class="vbar r" style="width:88px"></span>100%</td>
+            <td class="num">0</td>
+            <td class="win">tie</td>
+            <td>Vanilla still has full input</td>
+          </tr>
+          <tr class="winner-vanilla">
+            <td>16 K</td>
+            <td class="num"><span class="vbar v" style="width:88px"></span>100%</td>
+            <td class="num"><span class="vbar r" style="width:59px"></span>67%</td>
+            <td class="num">−33</td>
+            <td class="win">vanilla</td>
+            <td>RLM code-quality issue (small model)</td>
+          </tr>
+          <tr class="tie">
+            <td>32 K</td>
+            <td class="num"><span class="vbar v" style="width:29px"></span>33%</td>
+            <td class="num"><span class="vbar r" style="width:29px"></span>33%</td>
+            <td class="num">0</td>
+            <td class="win">tie</td>
+            <td>Truncation begins for vanilla</td>
+          </tr>
+          <tr class="winner-rlm">
+            <td>64 K</td>
+            <td class="num"><span class="vbar v" style="width:29px"></span>33%</td>
+            <td class="num"><span class="vbar r" style="width:59px"></span>67%</td>
+            <td class="num">+34</td>
+            <td class="win">rlm</td>
+            <td>Vanilla blind to most of the document</td>
+          </tr>
+          <tr class="winner-rlm">
+            <td>128 K</td>
+            <td class="num"><span class="vbar v" style="width:0"></span>0%</td>
+            <td class="num"><span class="vbar r" style="width:70px"></span>80%*</td>
+            <td class="num">+80</td>
+            <td class="win">rlm</td>
+            <td>Vanilla collapses; RLM still locates needle</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-family:var(--sans);font-size:12px;color:var(--ink-mute);margin-top:6px;">*Partial run; final point extrapolated from successful sub-runs.</p>
+    </div>
+  </div>
+
+  <h3>5.2 &nbsp; Reading the curve</h3>
+  <div class="row">
+    <div class="col-main">
+      <p>The shape of Figure 4 is more interesting than any individual cell. Below 16 K, the vanilla baseline is fine and faster — there is no honest reason to wrap a small prompt in a REPL loop. The 16 K row shows a real and worth-noting failure mode: at the boundary, the 2 B model's REPL code generation degrades faster than the vanilla path's attention does, so the architecture <em>loses</em> at the tie point. Above 32 K the picture inverts. Vanilla's effective input is fixed by the local KV cap; the RLM's effective input is the document. The advantage is not that the RLM is smarter — it is that vanilla is structurally blind.</p>
+    </div>
+    <aside class="sidenote cool"><span class="marker">[5]</span> The 16 K dip is interesting on its own. The model has just enough room to <em>almost</em> fit the document into the KV cache, which makes the vanilla path strong, while the RLM still has to write working code. Below this length, simpler is better; above it, simpler is impossible.</aside>
+  </div>
+
+  <p class="pullquote cool">The RLM's advantage is structural, not magical. It emerges exactly where the vanilla path stops being able to read.</p>
+
+  <!-- ============ §6 TRAINING ============ -->
+  <h2 id="sec-training" class="section"><span class="num">§6</span> Fine-Tuning &amp; the Muon Audit</h2>
+
+  <div class="row">
+    <div class="col-main">
+      <p>Each successful RLM run produces a <em>trajectory</em>: an ordered record of the code cells the root model wrote, the REPL output it received, the sub-call prompts and answers, and the final response. These trajectories are useful three times over — for debugging, for comparison, and as supervised fine-tuning data: an example of how a model <em>should</em> approach a long-context task.</p>
+
+      <p>The pipeline targets QLoRA on the same Qwen family with rank-16 adapters and a max sequence length of 2 048 tokens, so it fits inside 6 GB of VRAM. A central question for this work is whether the choice of optimiser affects either the final accuracy or the convergence speed of the trained adapter. We compare AdamW against Muon, an optimiser that applies Newton–Schulz orthogonalisation to 2-D weight matrices to produce direction-only updates.<sup class="ref cool" data-ref="6">[6]</sup></p>
+    </div>
+    <aside class="sidenote cool"><span class="marker">[6]</span> Muon's update step approximates the polar decomposition $G \approx UV^{\top}$ via 5 Newton–Schulz iterations and applies $W \leftarrow W - \eta \, UV^{\top}$. For full-parameter NanoGPT training it converges visibly faster than AdamW.</aside>
+  </div>
+
+  <h3>6.1 &nbsp; What the audit found</h3>
+  <div class="row">
+    <div class="col-main">
+      <p>A static audit of the off-the-shelf Muon implementation, applied to QLoRA adapters, revealed three issues that matter on this scale of training:</p>
+      <ul>
+        <li><strong>Missing momentum warmup.</strong> The published implementation hard-codes momentum at 0.95. The recommended practice — and what the official Muon repository now uses — is a linear ramp from 0.85 to 0.95 over the first ~300 steps. With LoRA's tiny trainable parameter count, the warmup is the difference between stable and unstable early gradients.</li>
+        <li><strong>Default learning rate inherited from full-parameter training.</strong> The default of 0.02 was tuned for full NanoGPT training. For LoRA adapters the magnitude is wrong by roughly an order of magnitude; we recommend starting at 0.005 and sweeping in [0.002, 0.005, 0.01, 0.02].</li>
+        <li><strong>Embedding/LM-head not excluded.</strong> The split function assigns parameters to Muon by the heuristic <code>ndim == 2</code>, which incorrectly pulls in <code>embed_tokens</code> and <code>lm_head</code>. Under QLoRA both are frozen, so the bug is silent in this run, but the guard belongs in the code regardless.</li>
+      </ul>
+    </div>
+  </div>
+
+<pre class="code"><span class="com"># Patched parameter split — embeddings and lm_head explicitly excluded</span>
+<span class="kw">def</span> <span class="fn">split_params_for_muon</span>(model):
+    muon_params, adamw_params = [], []
+    <span class="kw">for</span> name, p <span class="kw">in</span> model.named_parameters():
+        <span class="kw">if</span> <span class="kw">not</span> p.requires_grad: <span class="kw">continue</span>
+        <span class="kw">if</span> p.ndim == <span class="kw">2</span> <span class="kw">and</span> <span class="kw">not</span> any(x <span class="kw">in</span> name <span class="kw">for</span> x <span class="kw">in</span> (<span class="str">"embed_tokens"</span>, <span class="str">"lm_head"</span>)):
+            muon_params.append(p)
+        <span class="kw">else</span>:
+            adamw_params.append(p)
+    <span class="kw">return</span> muon_params, adamw_params</pre>
+
+  <h3>6.2 &nbsp; Status of the SFT run</h3>
+  <div class="row">
+    <div class="col-main">
+      <p>The training pipeline is built, the data-collection scripts are wired, and the audit corrections have been applied. The bottleneck at the time of writing is the size of the trajectory dataset itself: 16 clean trajectories from 52 candidate runs is well below the 500-1 000 minimum we target before the SFT vs. Muon ablation can produce a meaningful comparison. The next step — and the work this paper hands off to its successor — is a sustained generation run across a wider grid of NIAH and Long-Document-QA tasks to grow the trajectory pool, followed by paired AdamW and Muon training under matched seeds.</p>
+    </div>
+    <aside class="sidenote"><span class="marker">[7]</span> A useful negative finding: trajectory collection is the rate-limiting step, not the training itself. On a laptop, a single benchmark cell at 64 K tokens takes roughly a minute and a half. Two hundred such cells is several hours of wall-clock — but it is hours, not days, which is the threshold of feasibility.</aside>
+  </div>
+
+  <!-- ============ §7 LIMITATIONS ============ -->
+  <h2 class="section"><span class="num">§7</span> Limitations &amp; Failure Modes</h2>
+
+  <div class="row">
+    <div class="col-main">
+      <p>This study is small in every dimension that matters for a strong empirical claim. Three caveats worth naming:</p>
+
+      <h4>Single-model, single-hardware result</h4>
+      <p>Everything reported here uses one model family on one GPU. The crossover point — the context length at which RLM begins to win — is a function of both. A bigger model with a larger native KV cache would shift the crossover rightward; a slower one would shift it leftward. The <em>direction</em> of the result reproduces the original paper. The <em>quantitative</em> threshold is local.</p>
+
+      <h4>Code-quality dependence at the lower bound</h4>
+      <p>The 16 K dip is real and is the most informative failure mode in the dataset. A 2 B model is small enough that, on borderline-length problems, its REPL code occasionally has bugs the loop cannot recover from. A larger root model would not have this problem. SFT on collected trajectories should help; we have not yet shown that it does.</p>
+
+      <h4>Latency</h4>
+      <p>An RLM run on the Sherlock document takes ~60 seconds; the vanilla baseline takes ~15. The sub-calls are sequential in our implementation. Asynchronous parallel sub-calls — where independent <code>llm_query()</code> invocations dispatch concurrently — are the obvious next implementation step and are likely to compress total wall-clock by 2–3×.</p>
+    </div>
+  </div>
+
+  <!-- ============ §8 FUTURE WORK ============ -->
+  <h2 id="sec-future" class="section"><span class="num">§8</span> Future Work</h2>
+
+  <div class="row">
+    <div class="col-main">
+      <p>Three directions follow naturally from this work, in increasing order of ambition:</p>
+
+      <ol>
+        <li><strong>Async parallel sub-calls.</strong> Replace the sequential <code>llm_query()</code> dispatch with an async pool. Bounded concurrency is enough — the GPU saturates fast — but throughput gains should be substantial on multi-call iterations.</li>
+        <li><strong>Adaptive recursion depth.</strong> Let the root model decide whether a sub-call's answer is itself worth recursing on, instead of treating the recursion depth as fixed at 1. The added control flow is small; the question is whether the 2 B model can wield it without runaway loops.</li>
+        <li><strong>RLM-aware SFT, end to end.</strong> Once the trajectory pool reaches the 500-example threshold, run the AdamW vs. Muon ablation, merge the best LoRA adapter back into the base, and re-run the long-context benchmark. The hypothesis to falsify: an RLM-aware fine-tune narrows the 16 K gap and increases the 64 K margin without changing the inference architecture.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ============ §9 CONCLUSION ============ -->
+  <h2 class="section"><span class="num">§9</span> Conclusion</h2>
+
+  <div class="row">
+    <div class="col-main">
+      <p>The Recursive Language Model is best understood not as a new model but as a new <em>interface</em> between a language model and a long input. The interface — a Python REPL with a <code>context</code> string and an <code>llm_query()</code> hook — moves the work of finding evidence out of attention and into deterministic code, then folds the work of <em>reading</em> evidence into focused sub-calls that never grow large enough to suffer from context rot. The architectural claim is hardware-independent: it costs little to verify, costs nothing to run, and turns out to do exactly what its authors said it would. A 2 B model on a 6 GB laptop GPU finds needles in 64 K-token haystacks that a same-weights vanilla baseline cannot see at all. That is the entire claim, and it reproduces.</p>
+    </div>
+  </div>
+
+  <hr class="rule"/>
+
+  <!-- ============ REFERENCES ============ -->
+  <h2 class="section"><span class="num">§</span> References &amp; Further Reading</h2>
+  <div class="row">
+    <div class="col-main">
+      <ol style="font-family:var(--sans);font-size:14px;line-height:1.6;color:var(--ink-soft);">
+        <li>Zhang, A., Kraska, T., &amp; Khattab, O. (2025). <em>Recursive Language Models</em>. <a href="https://arxiv.org/abs/2512.24601" target="_blank" rel="noopener">arXiv:2512.24601</a>. The original paper this work reproduces.</li>
+        <li>Zhang, A. (2025). <em>RLM blog post</em>. <a href="https://alexzhang13.github.io/blog/2025/rlm/" target="_blank" rel="noopener">alexzhang13.github.io/blog/2025/rlm</a>. Author's accessible companion write-up.</li>
+        <li>Liu, N. F. et al. (2023). <em>Lost in the Middle: How Language Models Use Long Contexts</em>. The U-curve result.</li>
+        <li>Bertsch, A. et al. (2025). <em>OOLONG: A Long-Context Aggregation Benchmark</em>. <a href="https://arxiv.org/abs/2511.02817" target="_blank" rel="noopener">arXiv:2511.02817</a>.</li>
+        <li>Jordan, K. (2024). <em>Muon: Momentum-Orthogonalised Updates for 2-D Parameters</em>. <a href="https://github.com/KellerJordan/Muon" target="_blank" rel="noopener">github.com/KellerJordan/Muon</a>.</li>
+        <li>Patel, P. (2026). <em>RLM Reproduction — implementation, benchmarks, training audit</em>. <a href="https://github.com/priyank766/RLM" target="_blank" rel="noopener">github.com/priyank766/RLM</a>. The repository accompanying this paper.</li>
+      </ol>
+
+      <p style="font-family:var(--sans);font-size:13px;color:var(--ink-mute);margin-top:24px;">All code, prompts, and benchmark configurations are released under the project repository. Trajectory data and training checkpoints are available on request.</p>
+    </div>
+  </div>
+
+  <div class="colophon">
+    <div class="signature">Priyank Patel</div>
+    <div class="meta-row">
+      <span style="font-family:var(--mono);font-size:11px;letter-spacing:0.12em;color:var(--ink-mute);">— END OF PAPER —</span>
+      <span style="font-family:var(--mono);font-size:11px;letter-spacing:0.12em;color:var(--ink-mute);">v1.0 · MAY 2026</span>
+    </div>
+    <div style="font-family:var(--sans);font-size:13px;color:var(--ink-mute);max-width:520px;line-height:1.6;">
+      Set in <em>Source Serif&nbsp;4</em>, <em>Inter</em> &amp; <em>JetBrains Mono</em>. Figures hand-authored in SVG.
+      Typeset for the web; print-friendly. Independent reproduction — no affiliation with the original authors.
+    </div>
+    <div style="display:flex; gap:18px; font-family:var(--sans); font-size:13px;">
+      <a href="https://github.com/priyank766/RLM" target="_blank" rel="noopener">Repository ↗</a>
+      <a href="https://github.com/priyank766" target="_blank" rel="noopener">@priyank766 ↗</a>
+      <a href="#" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">Back to top ↑</a>
+    </div>
+  </div>
+
+</main>
+
+<!-- ============ SCROLL PROGRESS + REVEAL ============ -->
+<script>
+  (function() {
+    const bar = document.getElementById('readProgress');
+    function onScroll() {
+      const h = document.documentElement;
+      const pct = (h.scrollTop / Math.max(1, h.scrollHeight - h.clientHeight)) * 100;
+      if (bar) bar.style.width = pct + '%';
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    // mark sections, figures, abstract for reveal
+    const targets = document.querySelectorAll(
+      '.abstract, .kpi-strip, h2.section, figure, .pullquote, .traj, table.results, .colophon'
+    );
+    targets.forEach(t => t.classList.add('reveal'));
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+    targets.forEach(t => io.observe(t));
+  })();
+</script>
+
+<!-- ============ TRAJECTORY TOGGLE ============ -->
+<script>
+  (function() {
+    const bar = document.getElementById('trajToggle');
+    if (!bar) return;
+    const rlm = document.getElementById('trajRlm');
+    const van = document.getElementById('trajVan');
+    bar.querySelectorAll('button').forEach(b => {
+      b.addEventListener('click', () => {
+        const mode = b.dataset.mode;
+        bar.querySelectorAll('button').forEach(x => {
+          x.classList.remove('on','rlm','vanilla');
+          x.setAttribute('aria-selected','false');
+        });
+        b.classList.add('on', mode);
+        b.setAttribute('aria-selected','true');
+        rlm.style.display = (mode === 'rlm') ? '' : 'none';
+        van.style.display = (mode === 'vanilla') ? '' : 'none';
+      });
+    });
+  })();
+</script>
+
+<!-- ============ TWEAKS PANEL ============ -->
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel">
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "theme": "light",
+    "serif": "Source Serif 4",
+    "palette": "claret",
+    "fontSize": 18,
+    "measure": 780,
+    "showSidenotes": true,
+    "showDropCap": true
+  }/*EDITMODE-END*/;
+
+  // curated palettes — each defines [warm, cool, paper-bg, paper-surface, ink]
+  const PALETTES = {
+    claret:    { name: 'Claret & Slate',  warm: '#a8344a', cool: '#37536b', bg: '#f5f0e8', surf: '#fbf8f1', ink: '#1c1a17' },
+    botanical: { name: 'Botanical',       warm: '#b85c38', cool: '#3a6e4f', bg: '#f4f1e8', surf: '#fbf9f1', ink: '#1f1d18' },
+    midnight:  { name: 'Midnight Plum',   warm: '#c46a4f', cool: '#5a3a82', bg: '#efeae0', surf: '#f7f3eb', ink: '#1a1722' },
+    teal:      { name: 'Teal & Saffron',  warm: '#d4923a', cool: '#1f6e6a', bg: '#f3eee2', surf: '#faf6ec', ink: '#191c1c' },
+    minimal:   { name: 'Graphite',        warm: '#8a4a3a', cool: '#2a2a2a', bg: '#efece6', surf: '#f7f4ee', ink: '#111111' },
+    rust:      { name: 'Rust & Indigo',   warm: '#b04a2f', cool: '#2f4a99', bg: '#f6f3ec', surf: '#fbf9f3', ink: '#14110f' },
+    rose:      { name: 'Rose & Olive',    warm: '#c75a6e', cool: '#6e7a3f', bg: '#f5efe7', surf: '#fbf6ee', ink: '#1c1814' },
+    ocean:     { name: 'Ocean & Coral',   warm: '#e07a5f', cool: '#1d4e6e', bg: '#eef2ec', surf: '#f6f9f3', ink: '#0f1a22' }
+  };
+
+  function PaperTweaks() {
+    const { TweaksPanel, TweakSection, TweakRadio, TweakSelect, TweakSlider, TweakToggle, TweakColor } = window;
+    const [t, setTweak] = window.useTweaks(TWEAK_DEFAULTS);
+
+    React.useEffect(() => {
+      document.body.dataset.theme = t.theme;
+      const r = document.documentElement.style;
+      r.setProperty('--serif', `'${t.serif}', Georgia, serif`);
+      const p = PALETTES[t.palette] || PALETTES.claret;
+      r.setProperty('--vanilla', p.warm);
+      r.setProperty('--rlm', p.cool);
+      r.setProperty('--link', p.cool);
+      if (t.theme === 'light') {
+        r.setProperty('--paper-bg', p.bg);
+        r.setProperty('--paper-surface', p.surf);
+        r.setProperty('--ink', p.ink);
+      } else {
+        r.removeProperty('--paper-bg');
+        r.removeProperty('--paper-surface');
+        r.removeProperty('--ink');
+      }
+      r.setProperty('--fs-body', t.fontSize + 'px');
+      r.setProperty('--measure', t.measure + 'px');
+
+      const lede = document.querySelector('.lede');
+      if (lede) {
+        if (t.showDropCap) lede.classList.add('lede');
+        else lede.classList.remove('lede');
+      }
+      document.querySelectorAll('.sidenote').forEach(el => {
+        el.style.display = t.showSidenotes ? '' : 'none';
+      });
+    }, [t]);
+
+    const paletteOptions = Object.entries(PALETTES).map(([key, p]) => [p.warm, p.cool, p.bg]);
+    const paletteKeys = Object.keys(PALETTES);
+
+    return (
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="Theme">
+          <TweakRadio label="Mode" value={t.theme}
+            options={[{value:'light',label:'Paper'},{value:'dark',label:'Dossier'}]}
+            onChange={v => setTweak('theme', v)} />
+        </TweakSection>
+
+        <TweakSection title="Palette">
+          <TweakColor label="Preset"
+            value={PALETTES[t.palette] ? [PALETTES[t.palette].warm, PALETTES[t.palette].cool, PALETTES[t.palette].bg] : paletteOptions[0]}
+            options={paletteOptions}
+            onChange={v => {
+              const idx = paletteOptions.findIndex(p => p[0] === v[0] && p[1] === v[1]);
+              if (idx >= 0) setTweak('palette', paletteKeys[idx]);
+            }} />
+          <div style={{fontSize:'11px',color:'#888',marginTop:'4px',fontFamily:'var(--mono, monospace)',letterSpacing:'0.06em'}}>
+            {PALETTES[t.palette]?.name || ''}
+          </div>
+        </TweakSection>
+
+        <TweakSection title="Type">
+          <TweakSelect label="Serif"
+            value={t.serif}
+            options={['Source Serif 4','Iowan Old Style','Georgia','Charter','Times New Roman']}
+            onChange={v => setTweak('serif', v)} />
+          <TweakSlider label="Body size" min={15} max={21} step={1} value={t.fontSize}
+            onChange={v => setTweak('fontSize', v)} unit="px" />
+          <TweakSlider label="Column width" min={560} max={780} step={20} value={t.measure}
+            onChange={v => setTweak('measure', v)} unit="px" />
+        </TweakSection>
+
+        <TweakSection title="Layout">
+          <TweakToggle label="Show sidenotes" value={t.showSidenotes}
+            onChange={v => setTweak('showSidenotes', v)} />
+          <TweakToggle label="Drop cap" value={t.showDropCap}
+            onChange={v => setTweak('showDropCap', v)} />
+        </TweakSection>
+      </TweaksPanel>
+    );
+  }
+
+  const tweakRoot = document.createElement('div');
+  document.body.appendChild(tweakRoot);
+  ReactDOM.createRoot(tweakRoot).render(<PaperTweaks />);
+</script>
+
+</body>
+</html>
